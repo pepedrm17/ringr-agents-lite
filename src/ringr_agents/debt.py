@@ -1,10 +1,12 @@
 """Agente de cobros: registra compromisos de pago.
 
 Reglas deterministas para leer lo que dice el usuario (sin LLM):
-- Importe: un número seguido de «€» o «euros» («200 euros», «150,50 €»).
+- Importe: un número, con su signo si lo tiene, seguido de «€» o «euros» («200 euros»,
+  «150,50 €»). Un importe negativo se lee tal cual y la validación lo rechaza.
 - Fecha: «el 4» o «el día 4», según ``dates.resolve_day_of_month``, o una fecha
   completa «2026-10-04».
-- Si el usuario menciona un dato varias veces, vale lo último que dijo.
+- Si el usuario menciona un dato varias veces, vale lo último que dijo, también dentro
+  de un mismo mensaje («el 4, mejor el 5»).
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from ringr_agents.http import HttpClient, SimulatedHttpClient
 DEBT_URL = "https://api.ringr.debt/v1/commitment"
 CONFIRMATION = "Perfecto, anoto"
 
-_AMOUNT = re.compile(r"(?<![\d.,])(\d+(?:[.,]\d{1,2})?)\s*(?:€|euros?\b)", re.IGNORECASE)
+_AMOUNT = re.compile(r"(?<![\d.,])([-+]?\d+(?:[.,]\d{1,2})?)\s*(?:€|euros?\b)", re.IGNORECASE)
 _FULL_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 _DAY = re.compile(r"\bel\s+(?:d[ií]a\s+)?(\d{1,2})\b(?!\s*(?:€|euros?\b|de\s+\w))", re.IGNORECASE)
 _ISO_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -43,11 +45,19 @@ class DebtParser:
         for text in conversation.user_texts():
             if amounts := _AMOUNT.findall(text):
                 committed_amount = float(amounts[-1].replace(",", "."))
-            if full_date := _FULL_DATE.search(text):
-                commitment_date = full_date.group(1)
-            elif (day := _DAY.search(text)) and 1 <= int(day.group(1)) <= 31:
-                commitment_date = resolve_day_of_month(int(day.group(1)), self._today()).isoformat()
+            if mentioned := self._last_date_in(text):
+                commitment_date = mentioned
         return {"commitment_date": commitment_date, "committed_amount": committed_amount}
+
+    def _last_date_in(self, text: str) -> str | None:
+        """La fecha mencionada más a la derecha: completa (yyyy-mm-dd) o «el día N»."""
+        found = [(m.start(), m.group(1)) for m in _FULL_DATE.finditer(text)]
+        found += [
+            (m.start(), resolve_day_of_month(int(m.group(1)), self._today()).isoformat())
+            for m in _DAY.finditer(text)
+            if 1 <= int(m.group(1)) <= 31
+        ]
+        return max(found)[1] if found else None
 
 
 def decide_commitment(parsed: Mapping[str, object], today: date) -> Decision:
@@ -87,7 +97,7 @@ class DebtConversationModel:
         if any(
             m.role is Role.AGENT and m.text.startswith(CONFIRMATION) for m in conversation.messages
         ):
-            return "Ya tengo anotado tu compromiso de pago. Gracias."
+            return "Tu compromiso de pago ya está en curso. Gracias."
         decision = decide_commitment(self._parser.parse_data(conversation), self._today())
         if decision.payload is None:
             return f"{decision.reason}. ¿Me indicas qué día y cuánto podrás pagar?"

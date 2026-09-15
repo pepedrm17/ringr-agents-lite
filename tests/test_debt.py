@@ -37,6 +37,19 @@ def parse(*user_texts: str) -> dict[str, object]:
             ["Pagaré 200 euros", "mejor 250 euros"],
             {"commitment_date": None, "committed_amount": 250.0},
         ),
+        (
+            ["pagaré el 4, mejor el 5 y 200 euros"],
+            {"commitment_date": "2026-10-05", "committed_amount": 200.0},
+        ),
+        (
+            ["el 2026-10-01 o mejor el 2026-10-02, 80 €"],
+            {"commitment_date": "2026-10-02", "committed_amount": 80.0},
+        ),
+        (
+            ["el 2026-10-01, no, mejor el 20"],
+            {"commitment_date": "2026-09-20", "committed_amount": None},
+        ),
+        (["pagaré -20 euros"], {"commitment_date": None, "committed_amount": -20.0}),
     ],
 )
 def test_el_parser_lee_fecha_e_importe_de_lo_que_dice_el_usuario(
@@ -146,3 +159,14 @@ def test_si_el_endpoint_falla_el_siguiente_turno_reintenta() -> None:
     assert failed.status is ActionStatus.FAILED
     assert retried.status is ActionStatus.EXECUTED
     assert len(client.requests) == 2
+
+
+def test_un_importe_negativo_no_se_registra() -> None:
+    client = SimulatedHttpClient()
+    agent = build_debt_agent(client, today=lambda: TODAY)
+
+    result = agent.handle_turn("el 4 pagaré -20 euros")
+
+    assert result.status is ActionStatus.NOT_NEEDED
+    assert result.reason == "El importe debe ser mayor que cero"
+    assert client.requests == []

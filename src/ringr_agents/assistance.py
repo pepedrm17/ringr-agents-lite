@@ -1,8 +1,9 @@
 """Agente de atención al cliente: resuelve dudas y registra solicitudes para un compañero.
 
-Regla determinista (sin LLM): el último mensaje del usuario es una solicitud si
-pide algo con «quiero», «quisiera», «necesito», «me gustaría» o «solicito».
-«Quiero saber...» se trata como una duda.
+Regla determinista (sin LLM): un mensaje del usuario es una solicitud si pide algo
+con «quiero», «quisiera», «necesito», «me gustaría» o «solicito»; «quiero saber...»
+es una duda. Vale la última solicitud de la conversación, así que si el registro
+falla se reintenta en el siguiente turno aunque el usuario ya hable de otra cosa.
 """
 
 from __future__ import annotations
@@ -27,9 +28,11 @@ class AssistanceParser:
     """ParserModel del agente de atención al cliente."""
 
     def parse_data(self, conversation: Conversation) -> dict[str, object]:
-        texts = conversation.user_texts()
-        last = " ".join(texts[-1].split()) if texts else ""
-        return {"request": last if _REQUEST.search(last) else None}
+        for text in reversed(conversation.user_texts()):
+            normalized = " ".join(text.split())
+            if _REQUEST.search(normalized):
+                return {"request": normalized}
+        return {"request": None}
 
 
 def decide_request(parsed: Mapping[str, object]) -> Decision:
@@ -54,9 +57,7 @@ class AssistanceConversationModel:
         if any(
             m.role is Role.AGENT and m.text.startswith(CONFIRMATION) for m in conversation.messages
         ):
-            return (
-                "Ya he registrado una solicitud en esta conversación; un compañero te contactará."
-            )
+            return "Tu solicitud ya está en curso; un compañero te contactará."
         return f"{CONFIRMATION} para que la gestione un compañero."
 
 

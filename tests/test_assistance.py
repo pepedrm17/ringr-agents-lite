@@ -29,8 +29,11 @@ def test_una_solicitud_es_un_mensaje_que_pide_algo(text: str, expected: str | No
     assert parse(text) == {"request": expected}
 
 
-def test_solo_cuenta_el_ultimo_mensaje_del_usuario() -> None:
-    assert parse("Quiero cambiar mi dirección", "Gracias") == {"request": None}
+def test_cuenta_la_ultima_solicitud_de_la_conversacion() -> None:
+    assert parse("Quiero cambiar mi dirección", "Gracias") == {
+        "request": "Quiero cambiar mi dirección"
+    }
+    assert parse("Quiero A", "¿Y el horario?", "Necesito B") == {"request": "Necesito B"}
 
 
 @pytest.mark.parametrize("parsed", [{"request": None}, {"request": "   "}, {"request": 42}, {}])
@@ -55,8 +58,18 @@ def test_conversacion_completa_registra_la_solicitud_una_vez() -> None:
     assert request.request.headers["request"] == "Quiero cambiar mi dirección postal"
     assert request.answer == "Registro tu solicitud para que la gestione un compañero."
     assert another.status is ActionStatus.DUPLICATE
-    assert (
-        another.answer
-        == "Ya he registrado una solicitud en esta conversación; un compañero te contactará."
-    )
+    assert another.answer == "Tu solicitud ya está en curso; un compañero te contactará."
     assert len(client.requests) == 1
+
+
+def test_si_el_registro_falla_el_siguiente_mensaje_lo_reintenta() -> None:
+    client = SimulatedHttpClient(statuses=[500])
+    agent = build_assistance_agent(client)
+
+    failed = agent.handle_turn("Quiero cambiar mi dirección postal")
+    retried = agent.handle_turn("¿Ha quedado registrado?")
+
+    assert failed.status is ActionStatus.FAILED
+    assert retried.status is ActionStatus.EXECUTED
+    assert retried.answer == "Tu solicitud ya está en curso; un compañero te contactará."
+    assert len(client.requests) == 2
