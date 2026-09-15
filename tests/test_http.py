@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from ringr_agents.http import SimulatedHttpClient, build_post
 
 
@@ -36,3 +38,9 @@ def test_el_cliente_simulado_registra_y_responde_200_salvo_estados_programados()
     assert client.send(request).status == 500
     assert client.send(request).status == 200
     assert client.requests == [request, request]
+
+
+@pytest.mark.parametrize("name", ["campo\r\nX-Inyectada", "con espacio", "", "dos:puntos"])
+def test_rechaza_nombres_de_campo_que_no_son_nombres_de_cabecera_validos(name: str) -> None:
+    with pytest.raises(ValueError, match="cabecera"):
+        build_post("https://x.test", "t", {name: "valor"})

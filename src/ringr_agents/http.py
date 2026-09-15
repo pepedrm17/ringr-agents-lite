@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
 type Payload = Mapping[str, str | float]
+
+# Nombre de cabecera válido según RFC 9110 (token): sin espacios, dos puntos ni saltos de línea.
+_HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +33,9 @@ class HttpClient(Protocol):
 
 def build_post(url: str, token: str, payload: Payload) -> HttpRequest:
     """POST con Bearer token, los datos como cabeceras (mismo nombre) y como cuerpo JSON."""
+    invalid = [name for name in payload if not _HEADER_NAME.fullmatch(name)]
+    if invalid:
+        raise ValueError(f"Nombres de campo no válidos como cabecera HTTP: {invalid!r}")
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     # " ".join(split()) evita que un salto de línea del usuario rompa las cabeceras.
     headers.update({name: " ".join(str(value).split()) for name, value in payload.items()})
