@@ -82,6 +82,19 @@ def decide_commitment(parsed: Mapping[str, object], today: date) -> Decision:
     return Decision.act({"commitment_date": raw_date, "committed_amount": float(amount)})
 
 
+def _follow_up(reason: str) -> str:
+    """Pregunta solo por lo que falta o no es válido."""
+    if reason == "Falta la fecha":
+        return "¿Qué día podrás pagar?"
+    if reason == "Falta el importe":
+        return "¿Cuánto podrás pagar?"
+    if reason.startswith("La fecha"):
+        return "¿Qué otra fecha te viene bien?"
+    if reason.startswith("El importe"):
+        return "¿Qué importe podrás pagar?"
+    return "¿Qué día y cuánto podrás pagar?"
+
+
 def _euros(amount: float) -> str:
     return str(int(amount)) if amount.is_integer() else f"{amount:.2f}".replace(".", ",")
 
@@ -100,7 +113,7 @@ class DebtConversationModel:
             return "Tu compromiso de pago ya está en curso. Gracias."
         decision = decide_commitment(self._parser.parse_data(conversation), self._today())
         if decision.payload is None:
-            return f"{decision.reason}. ¿Me indicas qué día y cuánto podrás pagar?"
+            return f"{decision.reason}. {_follow_up(decision.reason)}"
         payment_date = date.fromisoformat(str(decision.payload["commitment_date"]))
         amount = float(decision.payload["committed_amount"])
         return f"{CONFIRMATION} el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."

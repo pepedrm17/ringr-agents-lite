@@ -170,3 +170,17 @@ def test_un_importe_negativo_no_se_registra() -> None:
     assert result.status is ActionStatus.NOT_NEEDED
     assert result.reason == "El importe debe ser mayor que cero"
     assert client.requests == []
+
+
+@pytest.mark.parametrize(
+    ("message", "question"),
+    [
+        ("Hola", "¿Qué día y cuánto podrás pagar?"),
+        ("Pagaré 200 euros", "¿Qué día podrás pagar?"),
+        ("el 4", "¿Cuánto podrás pagar?"),
+        ("el 2026-01-10 pago 90 euros", "¿Qué otra fecha te viene bien?"),
+    ],
+)
+def test_el_agente_pregunta_solo_por_lo_que_falta(message: str, question: str) -> None:
+    answer = build_debt_agent(today=lambda: TODAY).handle_turn(message).answer
+    assert answer.endswith(question)
