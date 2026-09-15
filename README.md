@@ -97,4 +97,6 @@ Cubren la regla de fechas (cambio de mes y de año, meses cortos, bisiestos), la
 
 ## Proceso
 
-Lo he desarrollado dirigiendo agentes de IA: Claude Code implementa cada bloque en una PR con tests primero, y Codex (OpenAI) revisa cada PR antes de fusionarla. Las revisiones y las correcciones están en el historial de PRs. Las decisiones de negocio de la tabla anterior las he tomado yo.
+Lo he desarrollado dirigiendo agentes de IA. Claude Code implementó cada bloque en una PR, con tests primero. Codex (OpenAI) revisó las PRs de la base, el motor y los agentes, y sus hallazgos se corrigieron antes de fusionarlas: inyección de cabeceras, importes negativos, fechas repetidas en un mensaje, solicitudes negadas… Todo está en el historial de PRs.
+
+La PR del README y la demo tuvo una primera revisión, pero su corrección y las PRs siguientes se fusionaron sin revisión de Codex, porque el plan de ChatGPT con el que se ejecutaba agotó su límite de uso. Esos cambios se verificaron con el CI, los tests y la demo. Las decisiones de negocio de la tabla anterior las he tomado yo, igual que el arbitraje cuando Codex rechazaba dos veces una PR.
