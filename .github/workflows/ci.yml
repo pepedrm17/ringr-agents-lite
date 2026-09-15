@@ -1,0 +1,28 @@
+# Calidad en cada PR y en main: lint, formato, tipos y tests.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  calidad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Formato
+        run: uv run ruff format --check src tests
+      - name: Tipos
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest
