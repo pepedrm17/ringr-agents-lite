@@ -53,8 +53,6 @@ jobs:
           && contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) }}
     runs-on: [self-hosted, macOS, codex-review]
     timeout-minutes: 30
-    outputs:
-      final_message: ${{ steps.run_codex.outputs.final_message }}
     steps:
       # Historial completo en el propio checkout: el repositorio es privado y un
       # fetch posterior sin credenciales persistentes no puede autenticarse.
@@ -154,29 +152,40 @@ jobs:
               print("::error::La salida de Codex contiene credenciales de la sesión; no se publica.")
               sys.exit(1)
           PY
-          delimiter="CODEX_OUTPUT_$(openssl rand -hex 16)"
-          {
-            echo "final_message<<$delimiter"
-            cat "$RUNNER_TEMP/codex-output.json"
-            echo
-            echo "$delimiter"
-          } >> "$GITHUB_OUTPUT"
+
+      # El veredicto viaja como artefacto y no como salida del job: GitHub descarta
+      # las salidas que parecen contener secretos (por ejemplo, si el texto cita una
+      # cabecera Authorization) y la review se perdería sin avisar.
+      - name: Guardar el veredicto
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-verdict
+          path: ${{ runner.temp }}/codex-output.json
+          if-no-files-found: error
+          retention-days: 7
 
   publicar_veredicto:
     runs-on: ubuntu-latest
     needs: codex
-    if: ${{ needs.codex.outputs.final_message != '' }}
+    if: ${{ needs.codex.result == 'success' }}
     permissions:
       pull-requests: write
     steps:
+      # Si falta el veredicto, la descarga falla y la ejecución queda en rojo.
+      - name: Recuperar el veredicto
+        uses: actions/download-artifact@v4
+        with:
+          name: codex-verdict
+          path: veredicto
+
       - name: Publicar review en la PR
         uses: actions/github-script@v7
         env:
-          CODEX_FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
+          VERDICT_FILE: veredicto/codex-output.json
         with:
           github-token: ${{ github.token }}
           script: |
-            const raw = process.env.CODEX_FINAL_MESSAGE;
+            const raw = require("fs").readFileSync(process.env.VERDICT_FILE, "utf8");
             let review;
             try {
               review = JSON.parse(raw);
