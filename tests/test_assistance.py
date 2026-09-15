@@ -23,6 +23,15 @@ def parse(*user_texts: str) -> dict[str, object]:
         ("Me gustaría hablar con un comercial", "Me gustaría hablar con un comercial"),
         ("¿Cuál es vuestro horario?", None),
         ("Quiero saber vuestro horario", None),
+        ("No quiero cambiar mi dirección", None),
+        ("Ya no necesito nada, gracias", None),
+        ("No me gustaría darme de baja", None),
+        ("Tampoco quiero hablar con un comercial", None),
+        ("No, quiero cambiar mi dirección", "No, quiero cambiar mi dirección"),
+        (
+            "No quiero cambiar la dirección, quiero darme de baja",
+            "No quiero cambiar la dirección, quiero darme de baja",
+        ),
     ],
 )
 def test_una_solicitud_es_un_mensaje_que_pide_algo(text: str, expected: str | None) -> None:
@@ -73,3 +82,25 @@ def test_si_el_registro_falla_el_siguiente_mensaje_lo_reintenta() -> None:
     assert retried.status is ActionStatus.EXECUTED
     assert retried.answer == "Tu solicitud ya está en curso; un compañero te contactará."
     assert len(client.requests) == 2
+
+
+def test_rechazar_algo_no_crea_ninguna_request() -> None:
+    client = SimulatedHttpClient()
+    agent = build_assistance_agent(client)
+
+    result = agent.handle_turn("No quiero cambiar mi dirección")
+
+    assert result.status is ActionStatus.NOT_NEEDED
+    assert client.requests == []
+
+
+def test_retirar_una_solicitud_fallida_evita_el_reintento() -> None:
+    client = SimulatedHttpClient(statuses=[500])
+    agent = build_assistance_agent(client)
+
+    failed = agent.handle_turn("Quiero cambiar mi dirección postal")
+    withdrawn = agent.handle_turn("No, ya no quiero cambiarla")
+
+    assert failed.status is ActionStatus.FAILED
+    assert withdrawn.status is ActionStatus.NOT_NEEDED
+    assert len(client.requests) == 1
