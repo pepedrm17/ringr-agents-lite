@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo · Agentes de Ringr (versión lite)</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f0f2f5; --border: #dfe3e8;
+    --text: #1d232b; --muted: #5b6573; --accent: #2f5bea; --accent-soft: #e8eeff;
+    --ok: #1c7c4a; --ok-soft: #e3f4ea; --warn: #9a5b00; --warn-soft: #fff1dc;
+    --info: #2d5f9a; --info-soft: #e5eefa; --bad: #b3261e; --bad-soft: #fde8e6;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151a; --surface: #1a1f26; --surface-2: #222833; --border: #313946;
+      --text: #e6e9ee; --muted: #9aa4b2; --accent: #7c9cff; --accent-soft: #232d4a;
+      --ok: #5fcf8f; --ok-soft: #173325; --warn: #f0b35a; --warn-soft: #3a2c14;
+      --info: #7fb2ee; --info-soft: #1b2a3d; --bad: #ff8a80; --bad-soft: #3b1d1b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 20px 64px; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  .subtitle { color: var(--muted); margin: 2px 0 0; }
+  .status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+  .status.ready .dot { background: var(--ok); } .status.error .dot { background: var(--bad); }
+  .status.loading .dot { animation: pulse 1s infinite alternate; }
+  @keyframes pulse { from { opacity: .35; } to { opacity: 1; } }
+  nav.steps { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 18px; }
+  nav.steps button { flex: 0 0 auto; border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+  nav.steps button[aria-current="step"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  nav.steps button .n { font-weight: 700; margin-right: 6px; }
+  section.step { display: none; } section.step.active { display: block; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  h2 { font-size: 20px; margin: 0 0 6px; } h3 { font-size: 15px; margin: 0 0 8px; }
+  .lead { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
+  .grid { display: grid; gap: 14px; }
+  .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cols-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+  .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 860px) { .cols-4, .cols-3 { grid-template-columns: 1fr 1fr; } .cols-2 { grid-template-columns: 1fr; } }
+  @media (max-width: 520px) { .cols-4, .cols-3 { grid-template-columns: 1fr; } }
+  .flow .card { position: relative; }
+  .flow .num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  .note { background: var(--accent-soft); border-radius: var(--radius); padding: 12px 14px; margin-top: 16px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
+  button.primary, button.secondary, a.button { font: inherit; border-radius: 8px; padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
+  button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); font-weight: 600; }
+  button.secondary, a.button { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .chat { display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+  .bubble { max-width: 88%; padding: 9px 13px; border-radius: 12px; }
+  .bubble small { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .bubble.user { align-self: flex-end; background: var(--accent-soft); border-bottom-right-radius: 4px; }
+  .bubble.agent { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 4px; }
+  .empty { color: var(--muted); font-style: italic; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; padding: 4px 10px; border-radius: 999px; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); } .badge.info { background: var(--info-soft); color: var(--info); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); } .badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .badge.none { background: var(--surface-2); color: var(--muted); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+  .kv dt { font-family: var(--mono); font-size: 13px; color: var(--muted); } .kv dd { margin: 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+  .detail > * + * { margin-top: 14px; }
+  .label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 6px; }
+  .request { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .request .line { background: var(--surface-2); padding: 8px 12px; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+  .request .method { font-weight: 700; color: var(--accent); margin-right: 6px; }
+  .request table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
+  .request td { padding: 5px 12px; border-top: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+  .request td:first-child { color: var(--muted); white-space: nowrap; width: 1%; }
+  .nowrap { white-space: nowrap; }
+  @media (max-width: 560px) {
+    .request td { display: block; width: auto; }
+    .request td:first-child { width: auto; padding-bottom: 0; white-space: normal; }
+    .request td + td { border-top: 0; padding-top: 2px; }
+  }
+  .tag { font-family: system-ui, sans-serif; font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  pre { margin: 0; padding: 10px 12px; background: var(--surface-2); font-family: var(--mono); font-size: 12.5px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .explain { margin: 0; }
+  ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  ul.checks li { display: flex; gap: 10px; align-items: flex-start; }
+  ul.checks .icon { font-size: 16px; line-height: 1.4; }
+  .conclusion { margin-top: 14px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .presets button { font: inherit; font-size: 13px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+  .tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tabs button { font: inherit; border: 0; background: var(--surface); color: var(--muted); padding: 7px 14px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+  label.field { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  input[type=text], textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  textarea { font-family: var(--mono); font-size: 13px; min-height: 92px; resize: vertical; }
+  .error-box { background: var(--bad-soft); color: var(--bad); border-radius: 8px; padding: 10px 12px; }
+  .summary-big { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: baseline; }
+  .summary-big .n { font-size: 30px; font-weight: 700; }
+  table.req { width: 100%; border-collapse: collapse; }
+  table.req th, table.req td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.req th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--muted); margin-top: 12px; }
+  .nav-bottom { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
+  .history { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .history li { font-size: 13px; color: var(--muted); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 28px; }
+  a { color: var(--accent); }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .today { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .today input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+  .header-right { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .chatbox { display: flex; gap: 8px; margin-top: 12px; }
+  .chatbox input { flex: 1; }
+  .chat.scroll { max-height: 420px; overflow-y: auto; }
+  table.rules { width: 100%; border-collapse: collapse; }
+  table.rules td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.rules td:first-child { font-weight: 600; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Agentes de Ringr · Demo</h1>
+      <p class="subtitle">Prueba técnica de Delivery Engineer · versión lite</p>
+    </div>
+    <div class="header-right">
+      <label class="today">Hoy es <input type="date" id="today"></label>
+      <div id="status" class="status loading" role="status"><span class="dot"></span><span id="status-text">Preparando Python en tu navegador…</span></div>
+    </div>
+  </header>
+
+  <nav class="steps" aria-label="Pasos de la demo" id="stepper"></nav>
+
+  <section class="step" data-title="Qué pide la prueba">
+    <div class="card">
+      <h2>Qué pide la prueba</h2>
+      <p class="lead">Dos agentes, <code>DebtAgent</code> y <code>AssistanceAgent</code>. En cada turno, <code>handle_turn</code> hace cuatro cosas:</p>
+      <div class="grid cols-4 flow">
+        <div class="card"><div class="num">1</div><h3>Responde</h3><p class="explain">Con <code>ConversationModel.answer_user</code>.</p></div>
+        <div class="card"><div class="num">2</div><h3>Extrae datos</h3><p class="explain">Con <code>ParserModel.parse_data</code>, que devuelve un dict.</p></div>
+        <div class="card"><div class="num">3</div><h3>Decide</h3><p class="explain">Valida los datos y comprueba si hay que actuar.</p></div>
+        <div class="card"><div class="num">4</div><h3>Ejecuta</h3><p class="explain">Construye la request con el Bearer token y los datos como cabeceras. No se envía.</p></div>
+      </div>
+      <p class="note"><strong>Esta página ejecuta el código real del repositorio</strong> (commit <code class="commit">…</code>) con Python dentro de tu navegador. No hay LLM: los datos se leen con reglas deterministas. Puedes cambiar la fecha de «hoy» arriba para ver cómo cambia la regla de fechas.</p>
+      <div class="actions"><button class="primary" data-go="1">Empezar: agente de cobros →</button></div>
+    </div>
+  </section>
+
+  <section class="step" data-title="Agente de cobros">
+    <div class="card">
+      <h2>Agente de cobros</h2>
+      <p class="lead">Registra compromisos de pago en <code>POST https://api.ringr.debt/v1/commitment</code> cuando conoce la fecha y el importe. Lo registra una sola vez por conversación.</p>
+      <div class="grid cols-2" data-scenario="cobros">
+        <div class="card"><div class="label">Conversación</div><div class="chat"><p class="empty">Pulsa «Siguiente turno».</p></div></div>
+        <div class="card detail"><p class="empty">Aquí verás los datos, la decisión y la request.</p></div>
+      </div>
+      <div class="actions"><button class="primary" data-next="cobros" disabled>Siguiente turno</button><button class="secondary" data-reset="cobros" disabled>Reiniciar</button></div>
+      <div class="card conclusion" data-conclusion="cobros" hidden></div>
+    </div>
+    <div class="nav-bottom"><button class="secondary" data-go="0">← Anterior</button><button class="primary" data-go="2">Agente de atención →</button></div>
+  </section>
+
+  <section class="step" data-title="Agente de atención">
+    <div class="card">
+      <h2>Agente de atención al cliente</h2>
+      <p class="lead">Resuelve dudas y registra solicitudes para un compañero en <code>POST https://api.ringr.assistance/v1/request</code>. Una solicitud es un mensaje que pide algo («quiero», «necesito»…).</p>
+      <div class="grid cols-2" data-scenario="atencion">
+        <div class="card"><div class="label">Conversación</div><div class="chat"><p class="empty">Pulsa «Siguiente turno».</p></div></div>
+        <div class="card detail"><p class="empty">Aquí verás los datos, la decisión y la request.</p></div>
+      </div>
+      <div class="actions"><button class="primary" data-next="atencion" disabled>Siguiente turno</button><button class="secondary" data-reset="atencion" disabled>Reiniciar</button></div>
+      <div class="card conclusion" data-conclusion="atencion" hidden></div>
+    </div>
+    <div class="nav-bottom"><button class="secondary" data-go="1">← Anterior</button><button class="primary" data-go="3">Chatea tú →</button></div>
+  </section>
+
+  <section class="step" data-title="Chatea tú">
+    <div class="card">
+      <h2>Chatea tú</h2>
+      <p class="lead">Escribe como lo haría un cliente. El agente es el real y recuerda la conversación: prueba a repetir, corregir o dar datos no válidos.</p>
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-kind="cobros">Cobros</button>
+        <button role="tab" aria-selected="false" data-kind="atencion">Atención</button>
+      </div>
+      <div class="grid cols-2" style="margin-top:14px">
+        <div class="card">
+          <div class="chat scroll" id="chat-log"><p class="empty">Todavía no hay mensajes.</p></div>
+          <form class="chatbox" id="chat-form"><input type="text" id="chat-input" placeholder="Escribe un mensaje" autocomplete="off"><button class="primary" id="chat-send" disabled>Enviar</button></form>
+          <div class="label" style="margin-top:12px">Ideas</div>
+          <div class="presets" id="chat-ideas"></div>
+          <div class="actions"><button class="secondary" id="chat-reset" disabled>Nueva conversación</button></div>
+        </div>
+        <div class="card detail" id="chat-detail"><p class="empty">El último turno aparecerá aquí.</p></div>
+      </div>
+    </div>
+    <div class="nav-bottom"><button class="secondary" data-go="2">← Anterior</button><button class="primary" data-go="4">Tests →</button></div>
+  </section>
+
+  <section class="step" data-title="Tests">
+    <div class="card">
+      <h2>Tests</h2>
+      <p class="lead">La suite completa del repositorio se ejecuta aquí mismo con pytest.</p>
+      <div class="actions"><button class="primary" id="run-tests" disabled>Ejecutar todos los tests</button><span id="tests-progress" class="subtitle"></span></div>
+      <div id="tests-result" style="margin-top:16px"></div>
+      <p class="note">Lint (<code>ruff</code>) y tipos (<code>mypy --strict</code>) no se ejecutan en el navegador: los comprueba el CI en cada PR.</p>
+    </div>
+    <div class="nav-bottom"><button class="secondary" data-go="3">← Anterior</button><button class="primary" data-go="5">Reglas y diseño →</button></div>
+  </section>
+
+  <section class="step" data-title="Reglas y diseño">
+    <div class="card">
+      <h2>Reglas de negocio y diseño</h2>
+      <table class="rules"><tbody>
+        <tr><td>Duplicados</td><td>Cada agente registra su acción como mucho una vez por conversación.</td></tr>
+        <tr><td>Fechas</td><td>«el 4» es este mes si ese día no ha pasado (hoy cuenta); si ya pasó, el mes siguiente; si ese mes no tiene ese día, el último día del mes.</td></tr>
+        <tr><td>Fecha pasada</td><td>Una fecha completa anterior a hoy no se registra.</td></tr>
+        <tr><td>Importe</td><td>Número con «€» o «euros», mayor que cero.</td></tr>
+        <tr><td>Solicitudes</td><td>Un mensaje que pide algo; «quiero saber…» es una duda y «no quiero…» rechaza.</td></tr>
+        <tr><td>Fallos HTTP</td><td>Solo 200 es éxito; cualquier otro código se reintenta en el siguiente turno.</td></tr>
+      </tbody></table>
+      <p class="explain" style="margin-top:14px">Diseño: una clase base <code>Agent</code> fija el orden del turno y la regla de duplicados; cada agente solo define su endpoint y <code>decide</code>.</p>
+      <div class="actions">
+        <a class="button" href="https://github.com/pepedrm17/ringr-agents-lite" target="_blank" rel="noopener">Repositorio</a>
+        <a class="button" href="https://github.com/pepedrm17/ringr-agents-lite#reglas-de-negocio" target="_blank" rel="noopener">README</a>
+        <a class="button" href="https://github.com/pepedrm17/ringr-agents-lite/pulls?q=is%3Apr" target="_blank" rel="noopener">PRs y revisiones</a>
+      </div>
+      <div class="label" style="margin-top:18px">Ejecutarlo en local</div>
+      <pre>git clone https://github.com/pepedrm17/ringr-agents-lite.git
+cd ringr-agents-lite
+uv sync && uv run pytest
+uv run python -m ringr_agents.demo chat cobros</pre>
+    </div>
+    <div class="nav-bottom"><button class="secondary" data-go="4">← Anterior</button><span></span></div>
+  </section>
+
+  <footer>Código del commit <code class="commit">…</code>, ejecutado con <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a> (Python compilado a WebAssembly).</footer>
+</div>
+
+<script type="application/json" id="payload">__PAYLOAD__</script>
+<script src="https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js"></script>
+<script>__JS__</script>
+</body>
+</html>

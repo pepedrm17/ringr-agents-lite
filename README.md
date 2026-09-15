@@ -6,6 +6,10 @@ Python 3.12+, solo biblioteca estándar. Herramientas de desarrollo: `uv`, `pyte
 
 ## Probarlo en un minuto
 
+**Sin instalar nada**: la [demo web](https://pepedrm17.github.io/ringr-agents-lite/) ejecuta este mismo código en el navegador. Tiene conversaciones guiadas, un chat libre con los agentes y la suite de tests.
+
+**En local**:
+
 ```bash
 uv sync
 uv run pytest                                    # tests
@@ -63,6 +67,7 @@ Agent.handle_turn(mensaje)
 | `dates.py` | Regla de «el día N» |
 | `debt.py`, `assistance.py` | Reglas de cada agente: lectura de datos, decisión y respuestas |
 | `demo.py` | Demo por consola |
+| `web/` | Demo web: página generada con el código del repositorio y publicada en GitHub Pages |
 
 **Añadir un agente** es escribir su regla de decisión y su endpoint:
 
