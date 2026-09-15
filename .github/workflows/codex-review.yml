@@ -118,6 +118,26 @@ jobs:
           ruff y mypy --strict. Prima la simplicidad: señala la complejidad innecesaria.
           Responde en castellano neutro.
 
+          Contexto: resumen del enunciado de la prueba. Manda sobre tus suposiciones; no pidas
+          cambios que lo contradigan.
+          - Cada agente expone handle_turn: responde con ConversationModel.answer_user, extrae los
+            datos con ParserModel.parse_data (dict tipo JSON), los valida, decide si actuar y ejecuta
+            la acción con una integración HTTP simulada que construye la request (URL, cabeceras y
+            cuerpo) sin enviarla.
+          - DebtAgent: commitment_date (None o 'yyyy-mm-dd') y committed_amount (None o float); con
+            los dos, POST a https://api.ringr.debt/v1/commitment.
+          - AssistanceAgent: request (None o str); si hay solicitud, POST a
+            https://api.ringr.assistance/v1/request.
+          - Todas las llamadas llevan Bearer ringr_test_token_9f3a2c1d y los datos del parser como
+            cabeceras con los mismos nombres. Se puede asumir que una petición exitosa devuelve 200 OK.
+          - Las acciones solo se ejecutan si se cumplen las condiciones y no se envían duplicados en la
+            conversación. No hay llamadas reales a LLMs.
+          Decisiones de negocio de esta versión lite, ya tomadas por el autor:
+          - cada agente registra su acción como mucho una vez por conversación;
+          - los datos se leen con reglas deterministas (expresiones regulares), sin simular un LLM;
+          - «el día N» es este mes si no ha pasado, si no el siguiente, y el último día si no existe;
+          - una fecha ya pasada no se registra; solo 200 es éxito y un fallo se reintenta.
+
           Criterios: corrección, casos límite, coherencia con el diseño declarado, principios SOLID
           aplicados con sentido, tests que prueban comportamiento real, nombres y comentarios claros,
           ausencia de sobreingeniería. No penalices decisiones documentadas con las que simplemente
