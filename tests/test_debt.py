@@ -111,6 +111,29 @@ def test_no_se_registra_con_datos_incompletos_o_no_validos(
     assert decision.reason == reason
 
 
+@pytest.mark.parametrize(
+    ("parsed", "reason"),
+    [
+        (
+            {"commitment_date": None, "committed_amount": -20.0},
+            "Falta la fecha. El importe debe ser mayor que cero",
+        ),
+        (
+            {"commitment_date": "2026-09-14", "committed_amount": -20.0},
+            "La fecha 2026-09-14 ya ha pasado. El importe debe ser mayor que cero",
+        ),
+        (
+            {"commitment_date": "2026-02-30", "committed_amount": None},
+            "La fecha 2026-02-30 no es válida. Falta el importe",
+        ),
+    ],
+)
+def test_se_informa_de_los_problemas_de_fecha_e_importe_a_la_vez(
+    parsed: dict[str, object], reason: str
+) -> None:
+    assert decide_commitment(parsed, TODAY).reason == reason
+
+
 def test_hoy_es_una_fecha_valida() -> None:
     decision = decide_commitment({"commitment_date": "2026-09-15", "committed_amount": 50}, TODAY)
     assert decision.payload == {"commitment_date": "2026-09-15", "committed_amount": 50.0}
@@ -179,6 +202,9 @@ def test_un_importe_negativo_no_se_registra() -> None:
         ("Pagaré 200 euros", "¿Qué día podrás pagar?"),
         ("el 4", "¿Cuánto podrás pagar?"),
         ("el 2026-01-10 pago 90 euros", "¿Qué otra fecha te viene bien?"),
+        ("el 4 pagaré -5 euros", "¿Qué importe podrás pagar?"),
+        ("Pagaré -20 euros", "¿Qué día y cuánto podrás pagar?"),
+        ("el 2026-01-10 pagaré -20 euros", "¿Qué día y cuánto podrás pagar?"),
     ],
 )
 def test_el_agente_pregunta_solo_por_lo_que_falta(message: str, question: str) -> None:

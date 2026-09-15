@@ -15,7 +15,7 @@ import math
 import re
 from collections.abc import Callable, Mapping
 from datetime import date
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from ringr_agents.agent import RINGR_TOKEN, Agent, Decision
 from ringr_agents.conversation import Conversation, ConversationModel, ParserModel, Role
@@ -60,39 +60,64 @@ class DebtParser:
         return max(found)[1] if found else None
 
 
-def decide_commitment(parsed: Mapping[str, object], today: date) -> Decision:
-    """Se registra con fecha válida no pasada e importe mayor que cero."""
-    raw_date, amount = parsed.get("commitment_date"), parsed.get("committed_amount")
-    missing = [
-        name for name, value in (("la fecha", raw_date), ("el importe", amount)) if value is None
-    ]
-    if missing:
-        verb = "Faltan" if len(missing) > 1 else "Falta"
-        return Decision.wait(f"{verb} {' y '.join(missing)}")
+MISSING_DATE = "Falta la fecha"
+MISSING_AMOUNT = "Falta el importe"
+
+
+def _date_problem(raw_date: object, today: date) -> str | None:
+    if raw_date is None:
+        return MISSING_DATE
+    if not isinstance(raw_date, str) or not _ISO_FORMAT.fullmatch(raw_date):
+        return f"La fecha {raw_date} no es válida"
     try:
-        if not isinstance(raw_date, str) or not _ISO_FORMAT.fullmatch(raw_date):
-            raise ValueError
         payment_date = date.fromisoformat(raw_date)
     except ValueError:
-        return Decision.wait(f"La fecha {raw_date} no es válida")
-    if payment_date < today:
-        return Decision.wait(f"La fecha {raw_date} ya ha pasado")
+        return f"La fecha {raw_date} no es válida"
+    return f"La fecha {raw_date} ya ha pasado" if payment_date < today else None
+
+
+def _amount_problem(amount: object) -> str | None:
+    if amount is None:
+        return MISSING_AMOUNT
     if isinstance(amount, bool) or not isinstance(amount, int | float) or not 0 < amount < math.inf:
-        return Decision.wait("El importe debe ser mayor que cero")
-    return Decision.act({"commitment_date": raw_date, "committed_amount": float(amount)})
+        return "El importe debe ser mayor que cero"
+    return None
 
 
-def _follow_up(reason: str) -> str:
+def decide_commitment(parsed: Mapping[str, object], today: date) -> Decision:
+    """Se registra con fecha válida no pasada e importe mayor que cero.
+
+    Si no, el motivo reúne a la vez los problemas de la fecha y del importe.
+    """
+    raw_date, amount = parsed.get("commitment_date"), parsed.get("committed_amount")
+    date_problem, amount_problem = _date_problem(raw_date, today), _amount_problem(amount)
+    if date_problem == MISSING_DATE and amount_problem == MISSING_AMOUNT:
+        return Decision.wait("Faltan la fecha y el importe")
+    if date_problem or amount_problem:
+        return Decision.wait(". ".join(p for p in (date_problem, amount_problem) if p))
+    # Sin problemas, la fecha es un texto yyyy-mm-dd y el importe un número positivo.
+    return Decision.act(
+        {"commitment_date": cast(str, raw_date), "committed_amount": float(cast(float, amount))}
+    )
+
+
+def follow_up_question(parsed: Mapping[str, object], today: date) -> str:
     """Pregunta solo por lo que falta o no es válido."""
-    if reason == "Falta la fecha":
-        return "¿Qué día podrás pagar?"
-    if reason == "Falta el importe":
-        return "¿Cuánto podrás pagar?"
-    if reason.startswith("La fecha"):
-        return "¿Qué otra fecha te viene bien?"
-    if reason.startswith("El importe"):
-        return "¿Qué importe podrás pagar?"
-    return "¿Qué día y cuánto podrás pagar?"
+    date_problem = _date_problem(parsed.get("commitment_date"), today)
+    amount_problem = _amount_problem(parsed.get("committed_amount"))
+    if date_problem and amount_problem:
+        return "¿Qué día y cuánto podrás pagar?"
+    if date_problem:
+        return (
+            "¿Qué día podrás pagar?"
+            if date_problem == MISSING_DATE
+            else "¿Qué otra fecha te viene bien?"
+        )
+    return (
+        "¿Cuánto podrás pagar?"
+        if amount_problem == MISSING_AMOUNT
+        else "¿Qué importe podrás pagar?"
+    )
 
 
 def _euros(amount: float) -> str:
@@ -111,9 +136,10 @@ class DebtConversationModel:
             m.role is Role.AGENT and m.text.startswith(CONFIRMATION) for m in conversation.messages
         ):
             return "Tu compromiso de pago ya está en curso. Gracias."
-        decision = decide_commitment(self._parser.parse_data(conversation), self._today())
+        parsed = self._parser.parse_data(conversation)
+        decision = decide_commitment(parsed, self._today())
         if decision.payload is None:
-            return f"{decision.reason}. {_follow_up(decision.reason)}"
+            return f"{decision.reason}. {follow_up_question(parsed, self._today())}"
         payment_date = date.fromisoformat(str(decision.payload["commitment_date"]))
         amount = float(decision.payload["committed_amount"])
         return f"{CONFIRMATION} el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."
