@@ -57,16 +57,17 @@ class AssistanceConversationModel:
         self._parser = parser
 
     def answer_user(self, conversation: Conversation) -> str:
-        if decide_request(self._parser.parse_data(conversation)).payload is None:
+        decision = decide_request(self._parser.parse_data(conversation))
+        if decision.payload is None:
             return (
                 "Te ayudo con tu duda. "
                 "Si necesitas que un compañero gestione algo, dime qué quieres."
             )
-        if any(
-            m.role is Role.AGENT and m.text.startswith(CONFIRMATION) for m in conversation.messages
-        ):
-            return "Tu solicitud ya está en curso; un compañero te contactará."
-        return f"{CONFIRMATION} para que la gestione un compañero."
+        confirmation = f"{CONFIRMATION}: «{decision.payload['request']}»."
+        # Si ya se confirmó esa misma solicitud, no se repite la confirmación.
+        if any(m.role is Role.AGENT and m.text == confirmation for m in conversation.messages):
+            return "Esa solicitud ya está en curso; un compañero te contactará."
+        return confirmation
 
 
 class AssistanceAgent(Agent):

@@ -56,8 +56,8 @@ def test_sin_solicitud_no_hay_accion(parsed: dict[str, object]) -> None:
 
 
 def test_conversacion_completa_registra_la_solicitud_una_vez() -> None:
-    """En una conversación completa, la duda no genera nada y la solicitud se registra una sola
-    vez.
+    """En una conversación completa, la duda no genera nada, la solicitud se registra y una
+    solicitud distinta se registra también.
     """
     client = SimulatedHttpClient()
     agent = build_assistance_agent(client)
@@ -71,9 +71,24 @@ def test_conversacion_completa_registra_la_solicitud_una_vez() -> None:
     assert request.request is not None
     assert request.request.url == "https://api.ringr.assistance/v1/request"
     assert request.request.headers["request"] == "Quiero cambiar mi dirección postal"
-    assert request.answer == "Registro tu solicitud para que la gestione un compañero."
-    assert another.status is ActionStatus.DUPLICATE
-    assert another.answer == "Tu solicitud ya está en curso; un compañero te contactará."
+    assert request.answer == "Registro tu solicitud: «Quiero cambiar mi dirección postal»."
+    assert another.status is ActionStatus.EXECUTED
+    assert [r.headers["request"] for r in client.requests] == [
+        "Quiero cambiar mi dirección postal",
+        "Y también quiero dar de baja mi línea",
+    ]
+
+
+def test_repetir_la_misma_solicitud_no_la_reenvia() -> None:
+    """Repetir la misma solicitud no envía una segunda request."""
+    client = SimulatedHttpClient()
+    agent = build_assistance_agent(client)
+    agent.handle_turn("Quiero cambiar mi dirección postal")
+
+    result = agent.handle_turn("Quiero cambiar mi dirección postal")
+
+    assert result.status is ActionStatus.DUPLICATE
+    assert result.answer == "Esa solicitud ya está en curso; un compañero te contactará."
     assert len(client.requests) == 1
 
 
@@ -87,7 +102,7 @@ def test_si_el_registro_falla_el_siguiente_mensaje_lo_reintenta() -> None:
 
     assert failed.status is ActionStatus.FAILED
     assert retried.status is ActionStatus.EXECUTED
-    assert retried.answer == "Tu solicitud ya está en curso; un compañero te contactará."
+    assert retried.answer == "Esa solicitud ya está en curso; un compañero te contactará."
     assert len(client.requests) == 2
 
 

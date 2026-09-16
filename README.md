@@ -37,7 +37,7 @@ El enunciado deja varias decisiones abiertas. Estas son las que he tomado, elegi
 
 | Tema | Regla |
 |------|-------|
-| Duplicados | Cada agente registra su acción **como mucho una vez por conversación**. Si después el usuario corrige el importe, no se vuelve a registrar. |
+| Duplicados | No se repite una acción **con los mismos datos** en la misma conversación. Si el usuario cambia de opinión, se registra otra vez con los datos actualizados. |
 | Fechas | «el 4» o «el día 4» es **este mes si ese día no ha pasado** (hoy cuenta), y si ya pasó, el mes siguiente. Si ese mes no tiene ese día («el 31» en septiembre), el **último día del mes**. También vale una fecha completa `2026-10-04`. |
 | Fecha pasada | Una fecha completa anterior a hoy **no se registra**. |
 | Importe | Un número con «€» o «euros» (`200 euros`, `150,50 €`), **mayor que cero**. |

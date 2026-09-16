@@ -58,7 +58,7 @@ document.querySelectorAll(".commit").forEach((n) => { n.textContent = PAYLOAD.co
 const STATUS = {
   sin_accion: ["none", "Sin acción"],
   ejecutada: ["ok", "Acción ejecutada"],
-  duplicada: ["info", "Ya registrada: no se reenvía"],
+  duplicada: ["info", "Mismos datos: no se reenvía"],
   fallida: ["bad", "Fallo: se reintentará"],
 };
 const FIXED = new Set(["Authorization", "Content-Type"]);
@@ -87,13 +87,13 @@ const bubble = (role, label, text) => el("div", { class: `bubble ${role}` }, el(
 /* ---------- conversaciones guiadas ---------- */
 const GUIDED = {
   cobros: {
-    expected: ["sin_accion", "sin_accion", "ejecutada", "duplicada"],
+    expected: ["sin_accion", "sin_accion", "ejecutada", "ejecutada"],
     // Cada explicación se calcula solo en su turno: antes del tercero no hay fecha que formatear.
     explain: (i, r) => [
       () => "Todavía no hay fecha ni importe: el agente pregunta por los dos.",
       () => "Ya sabe el importe, pero falta la fecha.",
       () => `«el 4»: hoy es ${formatDate(todayIso())}, así que la regla elige el ${formatDate(JSON.parse(r.parsed.commitment_date))}. Con fecha e importe, construye la request y registra el compromiso.`,
-      () => "El usuario corrige el importe, pero el compromiso ya se registró en esta conversación: no se vuelve a enviar.",
+      () => "El usuario corrige el importe: como los datos son distintos, se registra otra vez con el importe nuevo.",
     ][i](),
     checks: (t) => [
       ["No actúa sin fecha e importe", t[0].status === "sin_accion" && t[1].status === "sin_accion"],
@@ -101,7 +101,7 @@ const GUIDED = {
       ["Registra con URL, Bearer token y los datos como cabeceras", t[2].status === "ejecutada" && t[2].request?.url === "https://api.ringr.debt/v1/commitment"
         && t[2].request.headers.Authorization === "Bearer ringr_test_token_9f3a2c1d" && t[2].request.headers.committed_amount === "200.0"
         && t[2].request.headers.commitment_date === JSON.parse(t[2].parsed.commitment_date)],
-      ["No registra dos veces en la misma conversación", t[3].status === "duplicada" && !t[3].request],
+      ["Registra el cambio de opinión con el importe nuevo", t[3].status === "ejecutada" && t[3].request?.headers.committed_amount === "250.0"],
     ],
   },
   atencion: {
@@ -109,14 +109,14 @@ const GUIDED = {
     explain: (i) => [
       "Es una duda, no una solicitud: no hay nada que registrar.",
       "Pide algo («quiero…»): el agente registra la solicitud para un compañero.",
-      "Da las gracias. La solicitud ya se registró en esta conversación y no se reenvía.",
+      "Da las gracias: la solicitud sigue siendo la misma, así que no se reenvía.",
     ][i],
     checks: (t) => [
       ["Una duda no genera ninguna solicitud", t[0].status === "sin_accion"],
       ["Registra la solicitud con URL, Bearer token y la solicitud como cabecera", t[1].status === "ejecutada"
         && t[1].request?.url === "https://api.ringr.assistance/v1/request" && t[1].request.headers.Authorization === "Bearer ringr_test_token_9f3a2c1d"
         && t[1].request.headers.request === "Quiero cambiar mi dirección postal"],
-      ["No la registra dos veces", t[2].status === "duplicada" && !t[2].request],
+      ["No repite la misma solicitud", t[2].status === "duplicada" && !t[2].request],
     ],
   },
 };
