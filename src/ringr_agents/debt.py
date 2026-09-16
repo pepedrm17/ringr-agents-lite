@@ -132,17 +132,19 @@ class DebtConversationModel:
         self._today = today
 
     def answer_user(self, conversation: Conversation) -> str:
-        if any(
-            m.role is Role.AGENT and m.text.startswith(CONFIRMATION) for m in conversation.messages
-        ):
-            return "Tu compromiso de pago ya está en curso. Gracias."
         parsed = self._parser.parse_data(conversation)
         decision = decide_commitment(parsed, self._today())
         if decision.payload is None:
             return f"{decision.reason}. {follow_up_question(parsed, self._today())}"
         payment_date = date.fromisoformat(str(decision.payload["commitment_date"]))
         amount = float(decision.payload["committed_amount"])
-        return f"{CONFIRMATION} el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."
+        confirmation = (
+            f"{CONFIRMATION} el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."
+        )
+        # Si ya se confirmó ese mismo compromiso, no se repite la confirmación.
+        if any(m.role is Role.AGENT and m.text == confirmation for m in conversation.messages):
+            return "Ese compromiso ya lo tengo anotado. Gracias."
+        return confirmation
 
 
 class DebtAgent(Agent):

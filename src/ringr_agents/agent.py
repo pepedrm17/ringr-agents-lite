@@ -7,6 +7,7 @@ endpoint y ``decide``, la regla que dice si con los datos parseados se actúa.
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -53,6 +54,8 @@ class TurnResult:
 
 
 class Agent(ABC):
+    """Motor del turno. Una acción no se repite con los mismos datos en la misma conversación."""
+
     action: ClassVar[str]
     endpoint: ClassVar[str]
 
@@ -69,7 +72,8 @@ class Agent(ABC):
         self._http_client = http_client
         self._token = token
         self._conversation = Conversation()
-        self._registered = False
+        # Datos ya registrados con éxito en esta conversación, para no repetirlos.
+        self._sent: set[str] = set()
 
     @abstractmethod
     def decide(self, parsed: Mapping[str, object]) -> Decision:
@@ -84,8 +88,9 @@ class Agent(ABC):
         decision = self.decide(parsed)
         if decision.payload is None:
             return TurnResult(answer, parsed, ActionStatus.NOT_NEEDED, decision.reason)
-        if self._registered:
-            reason = f"«{self.action}» ya se registró en esta conversación"
+        fingerprint = json.dumps(dict(decision.payload), sort_keys=True, ensure_ascii=False)
+        if fingerprint in self._sent:
+            reason = f"«{self.action}» ya se registró con estos datos en esta conversación"
             return TurnResult(answer, parsed, ActionStatus.DUPLICATE, reason)
 
         request = build_post(self.endpoint, self._token, decision.payload)
@@ -95,5 +100,5 @@ class Agent(ABC):
                 f"El endpoint respondió {response.status}; se reintentará en el siguiente turno"
             )
             return TurnResult(answer, parsed, ActionStatus.FAILED, reason, request, response)
-        self._registered = True
+        self._sent.add(fingerprint)
         return TurnResult(answer, parsed, ActionStatus.EXECUTED, "", request, response)

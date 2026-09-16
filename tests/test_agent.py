@@ -57,8 +57,20 @@ def test_con_datos_suficientes_construye_y_envia_la_request() -> None:
     assert client.requests == [result.request]
 
 
-def test_la_accion_se_registra_una_sola_vez_por_conversacion_aunque_cambien_los_datos() -> None:
-    """La acción se registra una sola vez por conversación, aunque después cambien los datos."""
+def test_la_misma_accion_con_los_mismos_datos_no_se_repite() -> None:
+    """Repetir la acción con los mismos datos no envía una segunda request."""
+    agent, client = make_agent(RecordingModels(parsed={"target": "servidor-1"}))
+    agent.handle_turn("haz ping al 1")
+
+    result = agent.handle_turn("sí, al 1")
+
+    assert result.status is ActionStatus.DUPLICATE
+    assert result.request is None
+    assert len(client.requests) == 1
+
+
+def test_un_cambio_de_opinion_envia_la_accion_con_los_datos_nuevos() -> None:
+    """Si el usuario cambia de opinión, se envía la acción con los datos actualizados."""
     models = RecordingModels(parsed={"target": "servidor-1"})
     agent, client = make_agent(models)
     agent.handle_turn("haz ping al 1")
@@ -66,9 +78,23 @@ def test_la_accion_se_registra_una_sola_vez_por_conversacion_aunque_cambien_los_
     models.parsed = {"target": "servidor-2"}
     result = agent.handle_turn("mejor al 2")
 
+    assert result.status is ActionStatus.EXECUTED
+    assert [r.headers["target"] for r in client.requests] == ["servidor-1", "servidor-2"]
+
+
+def test_volver_a_unos_datos_ya_enviados_tampoco_se_repite() -> None:
+    """Volver a unos datos ya registrados no genera otra request."""
+    models = RecordingModels(parsed={"target": "servidor-1"})
+    agent, client = make_agent(models)
+    agent.handle_turn("haz ping al 1")
+    models.parsed = {"target": "servidor-2"}
+    agent.handle_turn("mejor al 2")
+
+    models.parsed = {"target": "servidor-1"}
+    result = agent.handle_turn("no, al 1 otra vez")
+
     assert result.status is ActionStatus.DUPLICATE
-    assert result.request is None
-    assert len(client.requests) == 1
+    assert len(client.requests) == 2
 
 
 def test_un_fallo_no_cuenta_como_enviado_y_el_siguiente_turno_reintenta() -> None:

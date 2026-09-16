@@ -149,8 +149,8 @@ def test_hoy_es_una_fecha_valida() -> None:
 
 
 def test_conversacion_completa_registra_una_vez_con_la_request_del_enunciado() -> None:
-    """Conversación completa: registra una vez y la request lleva URL, Bearer token y los datos
-    como cabeceras.
+    """Conversación completa: registra con URL, Bearer token y datos como cabeceras, y un cambio
+    de opinión se registra con el importe nuevo.
     """
     client = SimulatedHttpClient()
     agent = build_debt_agent(client, today=lambda: TODAY)
@@ -169,7 +169,21 @@ def test_conversacion_completa_registra_una_vez_con_la_request_del_enunciado() -
     assert third.request.headers["commitment_date"] == "2026-10-04"
     assert third.request.headers["committed_amount"] == "200.0"
     assert third.answer == "Perfecto, anoto el pago de 200 € para el 04/10/2026."
-    assert fourth.status is ActionStatus.DUPLICATE
+    assert fourth.status is ActionStatus.EXECUTED
+    assert fourth.answer == "Perfecto, anoto el pago de 250 € para el 04/10/2026."
+    assert [r.headers["committed_amount"] for r in client.requests] == ["200.0", "250.0"]
+
+
+def test_repetir_el_mismo_compromiso_no_lo_reenvia() -> None:
+    """Confirmar el mismo compromiso otra vez no envía una segunda request."""
+    client = SimulatedHttpClient()
+    agent = build_debt_agent(client, today=lambda: TODAY)
+    agent.handle_turn("el 4 pago 200 euros")
+
+    result = agent.handle_turn("sí, el 4, 200 euros")
+
+    assert result.status is ActionStatus.DUPLICATE
+    assert result.answer == "Ese compromiso ya lo tengo anotado. Gracias."
     assert len(client.requests) == 1
 
 
