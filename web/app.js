@@ -130,11 +130,19 @@ function startGuided(kind) {
   const conclusion = document.querySelector(`[data-conclusion="${kind}"]`); conclusion.hidden = true; clear(conclusion);
   updateGuidedButton(kind);
 }
+/* Al terminar la conversación, el botón deja de ser un cartel y lleva al paso siguiente:
+   toma su texto y su destino del botón inferior de la propia sección. */
+function nextStepButton(kind) {
+  const section = document.querySelector(`[data-next="${kind}"]`).closest("section.step");
+  return section.querySelector(".nav-bottom .primary[data-go]");
+}
 function updateGuidedButton(kind) {
   const g = guided[kind]; const button = document.querySelector(`[data-next="${kind}"]`);
   const done = g.results.length >= g.script.length;
-  button.disabled = done;
-  button.textContent = done ? "Conversación terminada" : `Siguiente turno (${g.results.length + 1} de ${g.script.length})`;
+  const next = nextStepButton(kind);
+  button.disabled = false;
+  button.dataset.mode = done ? "siguiente-paso" : "turno";
+  button.textContent = done ? next.textContent : `Siguiente turno (${g.results.length + 1} de ${g.script.length})`;
   document.querySelector(`[data-reset="${kind}"]`).disabled = false;
 }
 function nextGuided(kind) {
@@ -154,7 +162,12 @@ function nextGuided(kind) {
     c.hidden = false;
   }
 }
-document.querySelectorAll("[data-next]").forEach((b) => b.addEventListener("click", () => nextGuided(b.dataset.next)));
+document.querySelectorAll("[data-next]").forEach((b) =>
+  b.addEventListener("click", () => {
+    if (b.dataset.mode === "siguiente-paso") go(Number(nextStepButton(b.dataset.next).dataset.go));
+    else nextGuided(b.dataset.next);
+  }),
+);
 document.querySelectorAll("[data-reset]").forEach((b) => b.addEventListener("click", () => startGuided(b.dataset.reset)));
 
 /* ---------- chat libre ---------- */
