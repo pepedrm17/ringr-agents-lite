@@ -55,6 +55,9 @@ def parse(*user_texts: str) -> dict[str, object]:
 def test_el_parser_lee_fecha_e_importe_de_lo_que_dice_el_usuario(
     texts: list[str], expected: dict[str, object]
 ) -> None:
+    """Lee importe y fecha del texto del usuario, incluidas «el día N», la fecha completa y el
+    último dato repetido.
+    """
     assert parse(*texts) == expected
 
 
@@ -70,6 +73,9 @@ def test_el_parser_lee_fecha_e_importe_de_lo_que_dice_el_usuario(
 def test_lo_que_no_encaja_en_las_reglas_no_se_inventa(
     text: str, expected: dict[str, object]
 ) -> None:
+    """Lo que no encaja en las reglas (meses con nombre, importes sin moneda, días imposibles) se
+    deja sin leer.
+    """
     # Meses con nombre, importes sin moneda o con separador de miles y días imposibles
     # quedan sin leer: el agente pregunta en vez de adivinar.
     assert parse(text) == expected
@@ -106,6 +112,7 @@ def test_lo_que_no_encaja_en_las_reglas_no_se_inventa(
 def test_no_se_registra_con_datos_incompletos_o_no_validos(
     parsed: dict[str, object], reason: str
 ) -> None:
+    """No se registra con datos incompletos o no válidos, y el motivo nombra el campo."""
     decision = decide_commitment(parsed, TODAY)
     assert decision.payload is None
     assert decision.reason == reason
@@ -131,15 +138,20 @@ def test_no_se_registra_con_datos_incompletos_o_no_validos(
 def test_se_informa_de_los_problemas_de_fecha_e_importe_a_la_vez(
     parsed: dict[str, object], reason: str
 ) -> None:
+    """Cuando fallan los dos campos, el motivo reúne el problema de la fecha y el del importe."""
     assert decide_commitment(parsed, TODAY).reason == reason
 
 
 def test_hoy_es_una_fecha_valida() -> None:
+    """Un pago comprometido para hoy es válido y se registra."""
     decision = decide_commitment({"commitment_date": "2026-09-15", "committed_amount": 50}, TODAY)
     assert decision.payload == {"commitment_date": "2026-09-15", "committed_amount": 50.0}
 
 
 def test_conversacion_completa_registra_una_vez_con_la_request_del_enunciado() -> None:
+    """Conversación completa: registra una vez y la request lleva URL, Bearer token y los datos
+    como cabeceras.
+    """
     client = SimulatedHttpClient()
     agent = build_debt_agent(client, today=lambda: TODAY)
 
@@ -162,6 +174,7 @@ def test_conversacion_completa_registra_una_vez_con_la_request_del_enunciado() -
 
 
 def test_una_fecha_completa_ya_pasada_no_se_registra() -> None:
+    """Una fecha completa anterior a hoy no se registra."""
     client = SimulatedHttpClient()
     agent = build_debt_agent(client, today=lambda: TODAY)
 
@@ -173,6 +186,7 @@ def test_una_fecha_completa_ya_pasada_no_se_registra() -> None:
 
 
 def test_si_el_endpoint_falla_el_siguiente_turno_reintenta() -> None:
+    """Si el endpoint falla, el siguiente turno reintenta el mismo compromiso."""
     client = SimulatedHttpClient(statuses=[500])
     agent = build_debt_agent(client, today=lambda: TODAY)
 
@@ -185,6 +199,7 @@ def test_si_el_endpoint_falla_el_siguiente_turno_reintenta() -> None:
 
 
 def test_un_importe_negativo_no_se_registra() -> None:
+    """Un importe negativo («-20 euros») se lee con su signo y no se registra."""
     client = SimulatedHttpClient()
     agent = build_debt_agent(client, today=lambda: TODAY)
 
@@ -208,5 +223,6 @@ def test_un_importe_negativo_no_se_registra() -> None:
     ],
 )
 def test_el_agente_pregunta_solo_por_lo_que_falta(message: str, question: str) -> None:
+    """El agente pregunta solo por lo que falta o no es válido: el día, el importe o ambos."""
     answer = build_debt_agent(today=lambda: TODAY).handle_turn(message).answer
     assert answer.endswith(question)

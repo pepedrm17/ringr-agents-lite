@@ -14,6 +14,7 @@ def run(argv: list[str], typed: str = "") -> str:
 
 
 def test_el_guion_muestra_las_dos_conversaciones_con_sus_requests() -> None:
+    """La demo de consola recorre las dos conversaciones y muestra sus requests completas."""
     output = run(["guion", "--hoy", "2026-09-15"])
 
     assert "POST https://api.ringr.debt/v1/commitment" in output
@@ -25,6 +26,7 @@ def test_el_guion_muestra_las_dos_conversaciones_con_sus_requests() -> None:
 
 
 def test_el_chat_usa_lo_que_escribe_el_usuario_hasta_salir() -> None:
+    """El chat de la demo procesa lo que escribe el usuario hasta que escribe «salir»."""
     output = run(["chat", "cobros", "--hoy", "2026-09-15"], "el 4 pago 200 euros\nsalir\n")
 
     assert "Perfecto, anoto el pago de 200 € para el 04/10/2026." in output
@@ -32,6 +34,7 @@ def test_el_chat_usa_lo_que_escribe_el_usuario_hasta_salir() -> None:
 
 
 def test_una_fecha_de_hoy_mal_escrita_es_un_error_de_uso() -> None:
+    """Una fecha de «hoy» mal escrita se rechaza como error de uso de la demo."""
     with pytest.raises(SystemExit) as error:
         main(["guion", "--hoy", "15/09/2026"], stdout=io.StringIO())
     assert error.value.code == 2

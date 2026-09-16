@@ -19,6 +19,9 @@ from ringr_agents.dates import resolve_day_of_month
 def test_usa_este_mes_si_el_dia_no_ha_pasado_y_si_no_el_siguiente(
     today: date, day: int, expected: date
 ) -> None:
+    """«El día N» es este mes si ese día no ha pasado (hoy incluido) y, si ya pasó, el mes
+    siguiente.
+    """
     assert resolve_day_of_month(day, today) == expected
 
 
@@ -33,10 +36,14 @@ def test_usa_este_mes_si_el_dia_no_ha_pasado_y_si_no_el_siguiente(
 def test_si_el_dia_no_existe_en_ese_mes_usa_el_ultimo_dia(
     today: date, day: int, expected: date
 ) -> None:
+    """Si ese mes no tiene ese día (el 31 en septiembre, el 30 en febrero), usa el último día del
+    mes.
+    """
     assert resolve_day_of_month(day, today) == expected
 
 
 @pytest.mark.parametrize("day", [0, 32, -1])
 def test_rechaza_dias_fuera_de_rango(day: int) -> None:
+    """Un día fuera del rango 1-31 se rechaza en lugar de inventar una fecha."""
     with pytest.raises(ValueError, match="día"):
         resolve_day_of_month(day, date(2026, 9, 15))

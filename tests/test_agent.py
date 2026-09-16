@@ -14,6 +14,10 @@ def make_agent(
 
 
 def test_responde_antes_de_parsear_y_el_parser_ve_la_respuesta() -> None:
+    """El turno responde primero y el parser recibe la conversación con esa respuesta.
+
+    Comprueba el orden que fija el enunciado: answer_user y después parse_data.
+    """
     models = RecordingModels()
     agent, _ = make_agent(models)
 
@@ -28,6 +32,7 @@ def test_responde_antes_de_parsear_y_el_parser_ve_la_respuesta() -> None:
 
 
 def test_sin_datos_suficientes_no_hay_accion_y_se_explica_por_que() -> None:
+    """Sin datos suficientes no se ejecuta ninguna acción y el resultado dice por qué."""
     agent, client = make_agent(RecordingModels())
 
     result = agent.handle_turn("hola")
@@ -38,6 +43,9 @@ def test_sin_datos_suficientes_no_hay_accion_y_se_explica_por_que() -> None:
 
 
 def test_con_datos_suficientes_construye_y_envia_la_request() -> None:
+    """Con datos suficientes construye la request con su URL y su Bearer token, y la entrega al
+    cliente.
+    """
     agent, client = make_agent(RecordingModels(parsed={"target": "servidor"}))
 
     result = agent.handle_turn("haz ping")
@@ -50,6 +58,7 @@ def test_con_datos_suficientes_construye_y_envia_la_request() -> None:
 
 
 def test_la_accion_se_registra_una_sola_vez_por_conversacion_aunque_cambien_los_datos() -> None:
+    """La acción se registra una sola vez por conversación, aunque después cambien los datos."""
     models = RecordingModels(parsed={"target": "servidor-1"})
     agent, client = make_agent(models)
     agent.handle_turn("haz ping al 1")
@@ -63,6 +72,7 @@ def test_la_accion_se_registra_una_sola_vez_por_conversacion_aunque_cambien_los_
 
 
 def test_un_fallo_no_cuenta_como_enviado_y_el_siguiente_turno_reintenta() -> None:
+    """Una respuesta distinta de 200 no cuenta como enviada y el siguiente turno la reintenta."""
     agent, client = make_agent(
         RecordingModels(parsed={"target": "servidor"}), SimulatedHttpClient(statuses=[503])
     )
@@ -77,6 +87,7 @@ def test_un_fallo_no_cuenta_como_enviado_y_el_siguiente_turno_reintenta() -> Non
 
 
 def test_cada_agente_es_una_conversacion_independiente() -> None:
+    """Cada instancia de agente es una conversación independiente, con su propio registro."""
     first, first_client = make_agent(RecordingModels(parsed={"target": "servidor"}))
     second, second_client = make_agent(RecordingModels(parsed={"target": "servidor"}))
 
