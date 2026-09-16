@@ -1,8 +1,8 @@
 """Agente de atención al cliente: resuelve dudas y registra solicitudes para un compañero.
 
 Regla determinista (sin LLM): un mensaje del usuario es una solicitud si pide algo
-con «quiero», «quisiera», «necesito», «me gustaría» o «solicito»; «quiero saber...»
-es una duda. Si el último de esos verbos del mensaje va negado («no quiero», «ya no
+con «quiero», «quisiera», «necesito», «me gustaría» o «solicito», incluido «quiero
+saber...». Si el último de esos verbos del mensaje va negado («no quiero», «ya no
 necesito», «tampoco quiero»), el usuario rechaza algo: no es una solicitud y anula
 las anteriores. Vale la última solicitud de la conversación, así que si el registro
 falla se reintenta en el siguiente turno aunque el usuario ya hable de otra cosa.
@@ -19,11 +19,10 @@ from ringr_agents.conversation import Conversation, Role
 from ringr_agents.http import HttpClient, SimulatedHttpClient
 
 ASSISTANCE_URL = "https://api.ringr.assistance/v1/request"
-CONFIRMATION = "Registro tu solicitud"
 
 _REQUEST_VERB = re.compile(
     r"\b(?:(?P<negation>no|nunca|tampoco)\s+)?"
-    r"(?:quiero|quisiera|necesito|me gustar[ií]a|solicito)\b(?!\s+saber\b)",
+    r"(?:quiero|quisiera|necesito|me gustar[ií]a|solicito)\b",
     re.IGNORECASE,
 )
 
@@ -63,7 +62,7 @@ class AssistanceConversationModel:
                 "Te ayudo con tu duda. "
                 "Si necesitas que un compañero gestione algo, dime qué quieres."
             )
-        confirmation = f"{CONFIRMATION}: «{decision.payload['request']}»."
+        confirmation = f"Registro tu solicitud: «{decision.payload['request']}»."
         # Si ya se confirmó esa misma solicitud, no se repite la confirmación.
         if any(m.role is Role.AGENT and m.text == confirmation for m in conversation.messages):
             return "Esa solicitud ya está en curso; un compañero te contactará."

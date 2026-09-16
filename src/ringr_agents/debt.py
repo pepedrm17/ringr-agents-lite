@@ -1,10 +1,14 @@
 """Agente de cobros: registra compromisos de pago.
 
 Reglas deterministas para leer lo que dice el usuario (sin LLM):
-- Importe: un número, con su signo si lo tiene, seguido de «€» o «euros» («200 euros»,
-  «150,50 €»). Un importe negativo se lee tal cual y la validación lo rechaza.
-- Fecha: «el 4» o «el día 4», según ``dates.resolve_day_of_month``, o una fecha
-  completa «2026-10-04».
+- Importe: un número con su signo si lo tiene. La moneda por defecto es el euro, así que
+  «200 euros», «150,50 €» y «200» a secas son lo mismo; un número que forma parte de una
+  fecha («el 4») no es un importe. Un separador seguido de tres cifras son millares
+  («5.570» son 5570) y de una o dos, céntimos («55,70»). Un importe negativo se lee tal
+  cual y la validación lo rechaza.
+- Fecha: «el 4» o «el día 4», según ``dates.resolve_day_of_month``; «el 4 de octubre»,
+  con año opcional («el 4 de octubre de 2027»), según ``dates.resolve_month_day``; o una
+  fecha completa «2026-10-04».
 - Si el usuario menciona un dato varias veces, vale lo último que dijo, también dentro
   de un mismo mensaje («el 4, mejor el 5»).
 """
@@ -19,18 +23,58 @@ from typing import ClassVar, cast
 
 from ringr_agents.agent import RINGR_TOKEN, Agent, Decision
 from ringr_agents.conversation import Conversation, ConversationModel, ParserModel, Role
-from ringr_agents.dates import resolve_day_of_month
+from ringr_agents.dates import date_in_month, resolve_day_of_month, resolve_month_day
 from ringr_agents.http import HttpClient, SimulatedHttpClient
 
 DEBT_URL = "https://api.ringr.debt/v1/commitment"
-CONFIRMATION = "Perfecto, anoto"
 
-_AMOUNT = re.compile(r"(?<![\d.,])([-+]?\d+(?:[.,]\d{1,2})?)\s*(?:€|euros?\b)", re.IGNORECASE)
+_MONTHS = {
+    "enero": 1,
+    "febrero": 2,
+    "marzo": 3,
+    "abril": 4,
+    "mayo": 5,
+    "junio": 6,
+    "julio": 7,
+    "agosto": 8,
+    "septiembre": 9,
+    "setiembre": 9,
+    "octubre": 10,
+    "noviembre": 11,
+    "diciembre": 12,
+}
+
+# Un separador seguido de tres cifras son millares («5.570»); de una o dos, céntimos («55,70»).
+_NUMBER_CORE = r"(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)"
+_DECIMALS = re.compile(r"[.,](\d{1,2})$")
+
+_AMOUNT = re.compile(rf"(?<![\d.,])([-+]?{_NUMBER_CORE})\s*(?:€|euros?\b)", re.IGNORECASE)
+# Número suelto, sin moneda: se lee como euros si no forma parte de una fecha.
+# «el N» / «el día N» siempre es una referencia a un día, resuelva o no a una fecha.
+_NUMBER = re.compile(rf"(?<![\d.,])([-+]?{_NUMBER_CORE})(?![\d.,])")
+_DAY_REFERENCE = re.compile(r"\bel\s+(?:d[ií]a\s+)?(\d{1,2})\b", re.IGNORECASE)
 _FULL_DATE = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 _DAY = re.compile(r"\bel\s+(?:d[ií]a\s+)?(\d{1,2})\b(?!\s*(?:€|euros?\b|de\s+\w))", re.IGNORECASE)
+# «el 4 de octubre», «día 4 de octubre», «4 de octubre», con año opcional: «... de 2027».
+_MONTH_DATE = re.compile(
+    r"\b(?:el\s+)?(?:d[ií]a\s+)?(\d{1,2})\s+de\s+"
+    rf"({'|'.join(_MONTHS)})\b"
+    r"(?:\s+de\s+(\d{4})\b)?",
+    re.IGNORECASE,
+)
 _ISO_FORMAT = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 type Today = Callable[[], date]
+
+
+def _to_amount(raw: str) -> float:
+    """«5.570» son 5570 euros; «55,70» son 55 euros con 70 céntimos."""
+    sign = -1.0 if raw.startswith("-") else 1.0
+    digits = raw.lstrip("+-")
+    if decimals := _DECIMALS.search(digits):
+        whole = digits[: decimals.start()].replace(".", "").replace(",", "")
+        return sign * float(f"{whole}.{decimals.group(1)}")
+    return sign * float(digits.replace(".", "").replace(",", ""))
 
 
 class DebtParser:
@@ -43,21 +87,52 @@ class DebtParser:
         commitment_date: str | None = None
         committed_amount: float | None = None
         for text in conversation.user_texts():
-            if amounts := _AMOUNT.findall(text):
-                committed_amount = float(amounts[-1].replace(",", "."))
-            if mentioned := self._last_date_in(text):
-                commitment_date = mentioned
+            dates = self._dates_in(text)
+            if (amount := self._last_amount_in(text, dates)) is not None:
+                committed_amount = amount
+            if dates:
+                commitment_date = max(dates)[2]
         return {"commitment_date": commitment_date, "committed_amount": committed_amount}
 
-    def _last_date_in(self, text: str) -> str | None:
-        """La fecha mencionada más a la derecha: completa (yyyy-mm-dd) o «el día N»."""
-        found = [(m.start(), m.group(1)) for m in _FULL_DATE.finditer(text)]
+    def _dates_in(self, text: str) -> list[tuple[int, int, str]]:
+        """Fechas mencionadas y el tramo de texto que ocupa cada una."""
+        found = [(m.start(), m.end(), m.group(1)) for m in _FULL_DATE.finditer(text)]
         found += [
-            (m.start(), resolve_day_of_month(int(m.group(1)), self._today()).isoformat())
+            (m.start(), m.end(), resolve_day_of_month(int(m.group(1)), self._today()).isoformat())
             for m in _DAY.finditer(text)
             if 1 <= int(m.group(1)) <= 31
         ]
-        return max(found)[1] if found else None
+        found += [
+            (m.start(), m.end(), mentioned.isoformat())
+            for m in _MONTH_DATE.finditer(text)
+            if (mentioned := self._month_date(m)) is not None
+        ]
+        return found
+
+    def _last_amount_in(self, text: str, dates: list[tuple[int, int, str]]) -> float | None:
+        """El importe más a la derecha. La moneda por defecto es el euro, así que un número
+        suelto es un importe, salvo que forme parte de una fecha.
+        """
+        if with_currency := _AMOUNT.findall(text):
+            return _to_amount(with_currency[-1])
+        # «el 15 de cada mes» no da fecha, pero ese 15 sigue siendo un día, no un importe.
+        taken = [(start, end) for start, end, _ in dates]
+        taken += [(m.start(1), m.end(1)) for m in _DAY_REFERENCE.finditer(text)]
+        loose = [
+            m
+            for m in _NUMBER.finditer(text)
+            if not any(start <= m.start(1) < end for start, end in taken)
+        ]
+        return _to_amount(loose[-1].group(1)) if loose else None
+
+    def _month_date(self, match: re.Match[str]) -> date | None:
+        """«el 4 de octubre [de 2027]». Devuelve ``None`` si el día o el año no son válidos."""
+        day, month = int(match.group(1)), _MONTHS[match.group(2).lower()]
+        if not 1 <= day <= 31:
+            return None
+        if (year := match.group(3)) is None:
+            return resolve_month_day(day, month, self._today())
+        return date_in_month(int(year), month, day) if int(year) >= date.min.year else None
 
 
 MISSING_DATE = "Falta la fecha"
@@ -101,7 +176,7 @@ def decide_commitment(parsed: Mapping[str, object], today: date) -> Decision:
     )
 
 
-def follow_up_question(parsed: Mapping[str, object], today: date) -> str:
+def _follow_up_question(parsed: Mapping[str, object], today: date) -> str:
     """Pregunta solo por lo que falta o no es válido."""
     date_problem = _date_problem(parsed.get("commitment_date"), today)
     amount_problem = _amount_problem(parsed.get("committed_amount"))
@@ -121,7 +196,10 @@ def follow_up_question(parsed: Mapping[str, object], today: date) -> str:
 
 
 def _euros(amount: float) -> str:
-    return str(int(amount)) if amount.is_integer() else f"{amount:.2f}".replace(".", ",")
+    """Formato español: 1200.0 → «1.200»; 150.5 → «150,50»."""
+    whole, decimals = f"{amount:,.2f}".split(".")
+    whole = whole.replace(",", ".")
+    return whole if decimals == "00" else f"{whole},{decimals}"
 
 
 class DebtConversationModel:
@@ -135,11 +213,11 @@ class DebtConversationModel:
         parsed = self._parser.parse_data(conversation)
         decision = decide_commitment(parsed, self._today())
         if decision.payload is None:
-            return f"{decision.reason}. {follow_up_question(parsed, self._today())}"
+            return f"{decision.reason}. {_follow_up_question(parsed, self._today())}"
         payment_date = date.fromisoformat(str(decision.payload["commitment_date"]))
         amount = float(decision.payload["committed_amount"])
         confirmation = (
-            f"{CONFIRMATION} el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."
+            f"Perfecto, anoto el pago de {_euros(amount)} € para el {payment_date:%d/%m/%Y}."
         )
         # Si ya se confirmó ese mismo compromiso, no se repite la confirmación.
         if any(m.role is Role.AGENT and m.text == confirmation for m in conversation.messages):

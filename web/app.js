@@ -107,12 +107,12 @@ const GUIDED = {
   atencion: {
     expected: ["sin_accion", "ejecutada", "duplicada"],
     explain: (i) => [
-      "Es una duda, no una solicitud: no hay nada que registrar.",
+      "Una pregunta suelta, sin pedir nada: no hay ninguna solicitud que registrar.",
       "Pide algo («quiero…»): el agente registra la solicitud para un compañero.",
       "Da las gracias: la solicitud sigue siendo la misma, así que no se reenvía.",
     ][i],
     checks: (t) => [
-      ["Una duda no genera ninguna solicitud", t[0].status === "sin_accion"],
+      ["Un mensaje que no pide nada no genera solicitud", t[0].status === "sin_accion"],
       ["Registra la solicitud con URL, Bearer token y la solicitud como cabecera", t[1].status === "ejecutada"
         && t[1].request?.url === "https://api.ringr.assistance/v1/request" && t[1].request.headers.Authorization === "Bearer ringr_test_token_9f3a2c1d"
         && t[1].request.headers.request === "Quiero cambiar mi dirección postal"],
@@ -172,8 +172,8 @@ document.querySelectorAll("[data-reset]").forEach((b) => b.addEventListener("cli
 
 /* ---------- chat libre ---------- */
 const IDEAS = {
-  cobros: ["el 4 pago 200 euros", "Pagaré 150,50 €", "el 31", "mejor 250 euros", "el 2026-01-10", "pagaré -20 euros"],
-  atencion: ["¿Tenéis horario de tarde?", "Quiero cambiar mi dirección", "No quiero darme de baja", "Necesito una factura", "Gracias"],
+  cobros: ["el 4 pago 200 euros", "el 4 de diciembre pago 5.570", "Pagaré 150,50 €", "el 31", "mejor 250 euros", "el 2026-01-10", "pagaré -20 euros"],
+  atencion: ["¿Tenéis horario de tarde?", "Quiero cambiar mi dirección", "Quiero saber mi saldo", "No quiero darme de baja", "Necesito una factura", "Gracias"],
 };
 let chatKind = "cobros";
 const chatLog = document.getElementById("chat-log");

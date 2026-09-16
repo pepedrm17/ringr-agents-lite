@@ -6,7 +6,7 @@ import pytest
 
 from ringr_agents.agent import ActionStatus
 from ringr_agents.conversation import Conversation, Role
-from ringr_agents.debt import DebtParser, build_debt_agent, decide_commitment
+from ringr_agents.debt import DebtParser, _euros, build_debt_agent, decide_commitment
 from ringr_agents.http import SimulatedHttpClient
 
 TODAY = date(2026, 9, 15)
@@ -49,6 +49,62 @@ def parse(*user_texts: str) -> dict[str, object]:
             ["el 2026-10-01, no, mejor el 20"],
             {"commitment_date": "2026-09-20", "committed_amount": None},
         ),
+        (
+            ["el 4 de octubre pago 50 euros"],
+            {"commitment_date": "2026-10-04", "committed_amount": 50.0},
+        ),
+        (
+            ["el 4 de diciembre pago 50 euros"],
+            {"commitment_date": "2026-12-04", "committed_amount": 50.0},
+        ),
+        (  # enero ya ha pasado este año: el que viene
+            ["4 de enero, 100 euros"],
+            {"commitment_date": "2027-01-04", "committed_amount": 100.0},
+        ),
+        (  # el año explícito manda sobre la regla de cercanía
+            ["el 4 de Octubre de 2027, 50 euros"],
+            {"commitment_date": "2027-10-04", "committed_amount": 50.0},
+        ),
+        (  # dentro del mensaje vale la última fecha, sea del tipo que sea
+            ["el 4 de octubre, mejor el 5 de noviembre, 50 euros"],
+            {"commitment_date": "2026-11-05", "committed_amount": 50.0},
+        ),
+        (  # «de cada mes» no es un mes: no se inventa fecha
+            ["el 15 de cada mes"],
+            {"commitment_date": None, "committed_amount": None},
+        ),
+        (  # un día imposible no se lee
+            ["el 40 de octubre, 50 euros"],
+            {"commitment_date": None, "committed_amount": 50.0},
+        ),
+        (  # la moneda por defecto es el euro: «200» es lo mismo que «200 euros»
+            ["Pagaré 200"],
+            {"commitment_date": None, "committed_amount": 200.0},
+        ),
+        (  # el número de la fecha no es un importe
+            ["el 4"],
+            {"commitment_date": "2026-10-04", "committed_amount": None},
+        ),
+        (
+            ["el 4 de octubre pago 150,50"],
+            {"commitment_date": "2026-10-04", "committed_amount": 150.5},
+        ),
+        (  # tampoco lo es el de una fecha completa
+            ["el 2026-12-01 pago 90"],
+            {"commitment_date": "2026-12-01", "committed_amount": 90.0},
+        ),
+        (  # tres cifras detrás del separador son millares
+            ["pagaré 5.570 euros"],
+            {"commitment_date": None, "committed_amount": 5570.0},
+        ),
+        (  # una o dos, céntimos
+            ["pagaré 55.70 euros"],
+            {"commitment_date": None, "committed_amount": 55.7},
+        ),
+        (
+            ["el 4 de octubre pago 1.234.567,89"],
+            {"commitment_date": "2026-10-04", "committed_amount": 1234567.89},
+        ),
         (["pagaré -20 euros"], {"commitment_date": None, "committed_amount": -20.0}),
     ],
 )
@@ -64,20 +120,16 @@ def test_el_parser_lee_fecha_e_importe_de_lo_que_dice_el_usuario(
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("el 4 de octubre", {"commitment_date": None, "committed_amount": None}),
-        ("pago 200", {"commitment_date": None, "committed_amount": None}),
-        ("pagaré 1.000 euros", {"commitment_date": None, "committed_amount": None}),
+        ("el próximo martes, 20 euros", {"commitment_date": None, "committed_amount": 20.0}),
         ("el 45 pago 20 euros", {"commitment_date": None, "committed_amount": 20.0}),
     ],
 )
 def test_lo_que_no_encaja_en_las_reglas_no_se_inventa(
     text: str, expected: dict[str, object]
 ) -> None:
-    """Lo que no encaja en las reglas (meses con nombre, importes sin moneda, días imposibles) se
-    deja sin leer.
-    """
-    # Meses con nombre, importes sin moneda o con separador de miles y días imposibles
-    # quedan sin leer: el agente pregunta en vez de adivinar.
+    """Lo que no encaja en las reglas (fechas relativas, días imposibles) se deja sin leer."""
+    # Una fecha relativa o un día imposible quedan sin leer: el agente pregunta en vez de
+    # adivinar.
     assert parse(text) == expected
 
 
@@ -240,3 +292,12 @@ def test_el_agente_pregunta_solo_por_lo_que_falta(message: str, question: str) -
     """El agente pregunta solo por lo que falta o no es válido: el día, el importe o ambos."""
     answer = build_debt_agent(today=lambda: TODAY).handle_turn(message).answer
     assert answer.endswith(question)
+
+
+@pytest.mark.parametrize(
+    ("amount", "expected"),
+    [(200.0, "200"), (150.5, "150,50"), (5570.0, "5.570"), (1234567.89, "1.234.567,89")],
+)
+def test_el_importe_se_muestra_en_formato_espanol(amount: float, expected: str) -> None:
+    """Los millares se separan con punto y los céntimos con coma, como se escriben aquí."""
+    assert _euros(amount) == expected
