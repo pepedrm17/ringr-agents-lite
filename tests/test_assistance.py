@@ -22,7 +22,7 @@ def parse(*user_texts: str) -> dict[str, object]:
         ("  necesito   dar de baja mi línea ", "necesito dar de baja mi línea"),
         ("Me gustaría hablar con un comercial", "Me gustaría hablar con un comercial"),
         ("¿Cuál es vuestro horario?", None),
-        ("Quiero saber vuestro horario", None),
+        ("Quiero saber vuestro horario", "Quiero saber vuestro horario"),
         ("No quiero cambiar mi dirección", None),
         ("Ya no necesito nada, gracias", None),
         ("No me gustaría darme de baja", None),
@@ -35,7 +35,9 @@ def parse(*user_texts: str) -> dict[str, object]:
     ],
 )
 def test_una_solicitud_es_un_mensaje_que_pide_algo(text: str, expected: str | None) -> None:
-    """Reconoce como solicitud un mensaje que pide algo, y no una duda ni una frase negada."""
+    """Reconoce como solicitud un mensaje que pide algo, incluido «quiero saber», y no una
+    pregunta suelta ni una frase negada.
+    """
     assert parse(text) == {"request": expected}
 
 

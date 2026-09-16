@@ -20,7 +20,8 @@ from ringr_agents.debt import build_debt_agent
 
 AGENTS: dict[str, Callable[[date], Agent]] = {
     "cobros": lambda today: build_debt_agent(today=lambda: today),
-    "atencion": lambda today: build_assistance_agent(),
+    # El agente de atención no usa la fecha: el guion bajo lo declara.
+    "atencion": lambda _today: build_assistance_agent(),
 }
 TITLES = {"cobros": "cobros", "atencion": "atención al cliente"}
 SCRIPTS: dict[str, list[str]] = {
@@ -29,7 +30,7 @@ SCRIPTS: dict[str, list[str]] = {
 }
 
 
-def print_turn(out: TextIO, message: str, result: TurnResult) -> None:
+def _print_turn(out: TextIO, message: str, result: TurnResult) -> None:
     parsed = ", ".join(f"{key}={value!r}" for key, value in result.parsed.items())
     print(f"Usuario: {message}", file=out)
     print(f"Agente:  {result.answer}", file=out)
@@ -64,7 +65,7 @@ def main(
             print(f"=== Agente de {TITLES[name]} ===", file=stdout)
             agent = AGENTS[name](args.hoy)
             for message in messages:
-                print_turn(stdout, message, agent.handle_turn(message))
+                _print_turn(stdout, message, agent.handle_turn(message))
         return 0
 
     agent = AGENTS[args.agente](args.hoy)
@@ -76,7 +77,7 @@ def main(
         if message.lower() == "salir":
             break
         if message:
-            print_turn(stdout, message, agent.handle_turn(message))
+            _print_turn(stdout, message, agent.handle_turn(message))
     return 0
 
 
