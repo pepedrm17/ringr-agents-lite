@@ -49,7 +49,9 @@
   @media (max-width: 520px) { .cols-4, .cols-3 { grid-template-columns: 1fr; } }
   .flow .card { position: relative; }
   .flow .num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 13px; margin-bottom: 8px; }
-  code, .mono { font-family: var(--mono); font-size: 13px; }
+  /* Un identificador largo («ConversationModel.answer_user») no cabe en una columna
+     estrecha: sin esto ensancha su tarjeta y con ella toda la página. */
+  code, .mono { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
   .note { background: var(--accent-soft); border-radius: var(--radius); padding: 12px 14px; margin-top: 16px; }
   .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
   button.primary, button.secondary, a.button { font: inherit; border-radius: 8px; padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
@@ -143,8 +145,8 @@
       <h2>Qué pide la prueba</h2>
       <p class="lead">Dos agentes, <code>DebtAgent</code> y <code>AssistanceAgent</code>. En cada turno, <code>handle_turn</code> hace cuatro cosas:</p>
       <div class="grid cols-4 flow">
-        <div class="card"><div class="num">1</div><h3>Responde</h3><p class="explain">Con <code>ConversationModel.answer_user</code>.</p></div>
-        <div class="card"><div class="num">2</div><h3>Extrae datos</h3><p class="explain">Con <code>ParserModel.parse_data</code>, que devuelve un dict.</p></div>
+        <div class="card"><div class="num">1</div><h3>Responde</h3><p class="explain">Con <code>answer_user</code>, del <code>ConversationModel</code>.</p></div>
+        <div class="card"><div class="num">2</div><h3>Extrae datos</h3><p class="explain">Con <code>parse_data</code>, del <code>ParserModel</code>: devuelve un dict.</p></div>
         <div class="card"><div class="num">3</div><h3>Decide</h3><p class="explain">Valida los datos y comprueba si hay que actuar.</p></div>
         <div class="card"><div class="num">4</div><h3>Ejecuta</h3><p class="explain">Construye la request con el Bearer token y los datos como cabeceras. No se envía.</p></div>
       </div>
