@@ -47,6 +47,8 @@ El enunciado deja varias decisiones abiertas. Estas son las que he tomado, elegi
 
 No hay ningún LLM: los datos se leen con expresiones regulares y funciones deterministas. Es una decisión consciente: con reglas, el comportamiento es predecible y cada caso se puede probar.
 
+Por eso hay un parser y un modelo de conversación **por agente**. El enunciado permite considerar que un objeto genérico lleve en su estado interno lo necesario para adaptarse al caso de uso; con un LLM eso vive en el prompt, pero aquí las reglas son código: fechas e importes en cobros, detección de solicitudes y negaciones en atención. Un único objeto configurable con una tabla de reglas era posible, pero para dos casos añade una capa de indirección y hace que las reglas se lean peor. No hay subclases de `ConversationModel` ni de `ParserModel`: los contratos son `Protocol` y cada implementación es independiente.
+
 ## Diseño
 
 Una clase base con el orden fijo del turno y una regla por agente (patrón *Template Method*):
