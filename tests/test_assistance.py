@@ -35,10 +35,12 @@ def parse(*user_texts: str) -> dict[str, object]:
     ],
 )
 def test_una_solicitud_es_un_mensaje_que_pide_algo(text: str, expected: str | None) -> None:
+    """Reconoce como solicitud un mensaje que pide algo, y no una duda ni una frase negada."""
     assert parse(text) == {"request": expected}
 
 
 def test_cuenta_la_ultima_solicitud_de_la_conversacion() -> None:
+    """Vale la última solicitud de la conversación, aunque el usuario hable después de otra cosa."""
     assert parse("Quiero cambiar mi dirección", "Gracias") == {
         "request": "Quiero cambiar mi dirección"
     }
@@ -47,12 +49,16 @@ def test_cuenta_la_ultima_solicitud_de_la_conversacion() -> None:
 
 @pytest.mark.parametrize("parsed", [{"request": None}, {"request": "   "}, {"request": 42}, {}])
 def test_sin_solicitud_no_hay_accion(parsed: dict[str, object]) -> None:
+    """Sin solicitud (ausente, vacía o de otro tipo) no hay ninguna acción que ejecutar."""
     decision = decide_request(parsed)
     assert decision.payload is None
     assert decision.reason == "No hay ninguna solicitud que registrar"
 
 
 def test_conversacion_completa_registra_la_solicitud_una_vez() -> None:
+    """En una conversación completa, la duda no genera nada y la solicitud se registra una sola
+    vez.
+    """
     client = SimulatedHttpClient()
     agent = build_assistance_agent(client)
 
@@ -72,6 +78,7 @@ def test_conversacion_completa_registra_la_solicitud_una_vez() -> None:
 
 
 def test_si_el_registro_falla_el_siguiente_mensaje_lo_reintenta() -> None:
+    """Si el registro falla con un 500, el siguiente mensaje del usuario lo reintenta."""
     client = SimulatedHttpClient(statuses=[500])
     agent = build_assistance_agent(client)
 
@@ -85,6 +92,7 @@ def test_si_el_registro_falla_el_siguiente_mensaje_lo_reintenta() -> None:
 
 
 def test_rechazar_algo_no_crea_ninguna_request() -> None:
+    """«No quiero…» rechaza algo: no se construye ninguna request."""
     client = SimulatedHttpClient()
     agent = build_assistance_agent(client)
 
@@ -95,6 +103,7 @@ def test_rechazar_algo_no_crea_ninguna_request() -> None:
 
 
 def test_retirar_una_solicitud_fallida_evita_el_reintento() -> None:
+    """Si el usuario retira una solicitud que había fallado, ya no se reintenta."""
     client = SimulatedHttpClient(statuses=[500])
     agent = build_assistance_agent(client)
 

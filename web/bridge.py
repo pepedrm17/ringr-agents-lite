@@ -50,15 +50,33 @@ def turn(session: str, message: str) -> str:
 
 
 class _Collector:
+    """Recoge el resultado de cada test para poder explicar qué comprueba cada uno.
+
+    Un test parametrizado se agrupa en una sola entrada con el número de casos.
+    """
+
     def __init__(self) -> None:
-        self.by_file: dict[str, list[bool]] = defaultdict(list)
+        self.cases: dict[tuple[str, str], list[bool]] = defaultdict(list)
+        self.docs: dict[tuple[str, str], str] = {}
+
+    def pytest_collection_modifyitems(self, items: list[object]) -> None:
+        for item in items:
+            nodeid = str(getattr(item, "nodeid", ""))
+            file, _, test = nodeid.partition("::")
+            doc = getattr(getattr(item, "function", None), "__doc__", None)
+            if doc:
+                self.docs[(file, test.split("[")[0])] = " ".join(doc.split())
 
     def pytest_runtest_logreport(self, report: object) -> None:
         nodeid = str(getattr(report, "nodeid", ""))
+        if "::" not in nodeid:
+            return
+        file, _, test = nodeid.partition("::")
+        key = (file, test.split("[")[0])
         if getattr(report, "failed", False):
-            self.by_file[nodeid.split("::", maxsplit=1)[0]].append(False)
+            self.cases[key].append(False)
         elif getattr(report, "when", "") == "call" and getattr(report, "passed", False):
-            self.by_file[nodeid.split("::", maxsplit=1)[0]].append(True)
+            self.cases[key].append(True)
 
 
 def run_tests() -> str:
@@ -76,17 +94,23 @@ def run_tests() -> str:
             exit_code = int(pytest.main(["-p", "no:cacheprovider", "tests"], plugins=[collector]))
     finally:
         os.chdir(previous)
-    files = [
-        {"file": name, "passed": sum(results), "total": len(results)}
-        for name, results in sorted(collector.by_file.items())
+    tests = [
+        {
+            "file": file,
+            "test": test,
+            "doc": collector.docs.get((file, test), ""),
+            "passed": sum(results),
+            "cases": len(results),
+        }
+        for (file, test), results in sorted(collector.cases.items())
     ]
     return json.dumps(
         {
             "exit_code": exit_code,
             "seconds": round(time.perf_counter() - started, 2),
-            "passed": sum(f["passed"] for f in files),
-            "failed": sum(f["total"] - f["passed"] for f in files),
-            "files": files,
+            "passed": sum(t["passed"] for t in tests),
+            "failed": sum(t["cases"] - t["passed"] for t in tests),
+            "tests": tests,
             "output": buffer.getvalue(),
         },
         ensure_ascii=False,

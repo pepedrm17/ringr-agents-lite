@@ -8,6 +8,9 @@ from ringr_agents.http import SimulatedHttpClient, build_post
 
 
 def test_build_post_incluye_bearer_cabeceras_con_los_datos_y_cuerpo_json() -> None:
+    """La request lleva el Bearer token, los datos como cabeceras con su mismo nombre y el cuerpo
+    JSON.
+    """
     request = build_post(
         "https://api.ringr.debt/v1/commitment",
         "ringr_test_token_9f3a2c1d",
@@ -26,12 +29,18 @@ def test_build_post_incluye_bearer_cabeceras_con_los_datos_y_cuerpo_json() -> No
 
 
 def test_los_saltos_de_linea_no_llegan_a_las_cabeceras() -> None:
+    """Los saltos de línea del texto del usuario no llegan a las cabeceras; el cuerpo conserva el
+    original.
+    """
     request = build_post("https://x.test", "t", {"request": "cambiar\r\ndirección"})
     assert request.headers["request"] == "cambiar dirección"
     assert json.loads(request.body) == {"request": "cambiar\r\ndirección"}
 
 
 def test_el_cliente_simulado_registra_y_responde_200_salvo_estados_programados() -> None:
+    """El cliente simulado guarda cada request y responde 200, salvo los estados programados para
+    probar fallos.
+    """
     client = SimulatedHttpClient(statuses=[500])
     request = build_post("https://x.test", "t", {"a": "b"})
 
@@ -42,11 +51,13 @@ def test_el_cliente_simulado_registra_y_responde_200_salvo_estados_programados()
 
 @pytest.mark.parametrize("name", ["campo\r\nX-Inyectada", "con espacio", "", "dos:puntos"])
 def test_rechaza_nombres_de_campo_que_no_son_nombres_de_cabecera_validos(name: str) -> None:
+    """Un nombre de campo que no es una cabecera HTTP válida se rechaza."""
     with pytest.raises(ValueError, match="cabecera"):
         build_post("https://x.test", "t", {name: "valor"})
 
 
 @pytest.mark.parametrize("name", ["Authorization", "authorization", "CONTENT-TYPE", "Content-Type"])
 def test_un_campo_no_puede_sustituir_las_cabeceras_fijas(name: str) -> None:
+    """Un campo llamado Authorization o Content-Type no puede sustituir a las cabeceras fijas."""
     with pytest.raises(ValueError, match="reservad"):
         build_post("https://x.test", "t", {name: "otro valor"})

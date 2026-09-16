@@ -201,6 +201,45 @@ selectChat("cobros");
 todayInput.addEventListener("change", () => { if (!bridge || !todayIso()) return; startGuided("cobros"); startGuided("atencion"); resetChat(); });
 
 /* ---------- tests ---------- */
+const TEST_GROUPS = {
+  "tests/test_dates.py": "Regla de fechas",
+  "tests/test_debt.py": "Agente de cobros: lectura de datos, validación y registro",
+  "tests/test_assistance.py": "Agente de atención: solicitudes, rechazos y reintentos",
+  "tests/test_agent.py": "Motor del turno: orden, duplicados y reintentos",
+  "tests/test_http.py": "Request HTTP: cabeceras, cuerpo y cliente simulado",
+  "tests/test_demo.py": "Demo por consola",
+};
+/* El nombre de cada test ya describe el comportamiento: «test_un_importe_negativo_no_se_registra». */
+function testSentence(name) {
+  const text = name.replace(/^test_/, "").replaceAll("_", " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+function renderTests(box, result) {
+  const groups = new Map();
+  for (const test of result.tests) {
+    if (!groups.has(test.file)) groups.set(test.file, []);
+    groups.get(test.file).push(test);
+  }
+  const ok = result.exit_code === 0 && result.failed === 0 && result.passed > 0;
+  box.append(el("div", { class: "summary-big" },
+    el("span", { class: `badge ${ok ? "ok" : "bad"}`, text: ok ? "✅ Todo en verde" : "❌ Hay fallos" }),
+    el("span", {}, el("span", { class: "n", text: String(result.passed) }), " comprobaciones superadas"),
+    el("span", {}, el("span", { class: "n", text: String(result.tests.length) }), " tests"),
+    el("span", { class: "subtitle", text: `${result.seconds.toLocaleString("es-ES")} s` })));
+  box.append(el("p", { class: "explain", style: "margin-top:10px", text:
+    "Cada línea es un test que se acaba de ejecutar aquí, con la descripción que lleva en el código. Un test que se ejecuta con varios juegos de datos lo indica entre paréntesis." }));
+  for (const [file, tests] of groups) {
+    const passed = tests.reduce((n, t) => n + t.passed, 0);
+    const cases = tests.reduce((n, t) => n + t.cases, 0);
+    box.append(el("div", { class: "card", style: "margin-top:14px" },
+      el("h3", {}, TEST_GROUPS[file] || file, el("span", { class: "tag nowrap", text: `${passed}/${cases}` })),
+      el("div", { class: "label", text: file }),
+      el("ul", { class: "checks" }, tests.map((t) => el("li", {},
+        el("span", { class: "icon", text: t.passed === t.cases ? "✅" : "❌" }),
+        el("span", {}, t.doc || testSentence(t.test), t.cases > 1 ? el("span", { class: "subtitle", text: ` (${t.cases} casos)` }) : null))))));
+  }
+  box.append(el("details", {}, el("summary", { text: "Ver la salida de pytest" }), el("pre", { text: result.output })));
+}
 document.getElementById("run-tests").addEventListener("click", async () => {
   const button = document.getElementById("run-tests"); const progress = document.getElementById("tests-progress");
   const box = clear(document.getElementById("tests-result"));
@@ -209,17 +248,8 @@ document.getElementById("run-tests").addEventListener("click", async () => {
   try {
     await pyodide.loadPackage("pytest", { messageCallback: () => {} });
     await new Promise((resolve) => setTimeout(resolve, 30));
-    const r = call("run_tests"); clear(progress);
-    const ok = r.exit_code === 0 && r.failed === 0 && r.passed > 0;
-    box.append(
-      el("div", { class: "summary-big" }, el("span", { class: `badge ${ok ? "ok" : "bad"}`, text: ok ? "✅ Todo en verde" : "❌ Hay fallos" }),
-        el("span", {}, el("span", { class: "n", text: String(r.passed) }), " tests superados"),
-        el("span", {}, el("span", { class: "n", text: String(r.failed) }), " fallidos"),
-        el("span", { class: "subtitle", text: `${r.seconds.toLocaleString("es-ES")} s` })),
-      el("table", { class: "req", style: "margin-top:14px" },
-        el("thead", {}, el("tr", {}, el("th", { text: "Fichero" }), el("th", { text: "Superados" }), el("th", { text: "Estado" }))),
-        el("tbody", {}, r.files.map((f) => el("tr", {}, el("td", { class: "mono", text: f.file }), el("td", { class: "mono", text: `${f.passed}/${f.total}` }), el("td", { text: f.passed === f.total ? "✅" : "❌" }))))),
-      el("details", {}, el("summary", { text: "Ver la salida de pytest" }), el("pre", { text: r.output })));
+    renderTests(box, call("run_tests"));
+    clear(progress);
     button.textContent = "Tests ejecutados";
   } catch (error) {
     clear(progress); box.append(el("div", { class: "error-box", text: `No se pudieron ejecutar los tests: ${error.message}` })); button.disabled = false;
